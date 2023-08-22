@@ -1,6 +1,6 @@
 {
-    "name": "pestphp/pest-plugin-template",
-    "description": "My awesome plugin",
+    "name": "vmeretail/pest-plugin-bdd",
+    "description": "Behaviour Driven Development (BDD) Plugin for Pest PHP",
     "keywords": [
         "php",
         "framework",
@@ -8,17 +8,20 @@
         "unit",
         "test",
         "testing",
-        "plugin"
+        "plugin",
+        "bdd"
     ],
     "license": "MIT",
     "require": {
         "php": "^8.1",
+        "behat/gherkin": "v4.9.0",
+        "nikic/php-parser": "^4.17",
         "pestphp/pest": "^2.5",
         "pestphp/pest-plugin": "^2.0.1"
     },
     "autoload": {
         "psr-4": {
-            "Pest\\PluginName\\": "src/"
+            "Vmeretail\\PestPluginBdd\\": "src/"
         },
         "files": [
             "src/Autoload.php"
@@ -49,5 +52,12 @@
             "@test:types",
             "@test:unit"
         ]
+    },
+    "extra": {
+        "pest": {
+            "plugins": [
+                "Vmeretail\\PestPluginBdd\\Plugin"
+            ]
+        }
     }
 }
