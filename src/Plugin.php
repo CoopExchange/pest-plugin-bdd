@@ -51,6 +51,7 @@ final class Plugin implements HandlesArguments
 
     public function handleArguments(array $arguments): array
     {
+
         if (! $this->hasArgument('--bdd', $arguments)) {
             return $arguments;
         }
@@ -135,7 +136,17 @@ final class Plugin implements HandlesArguments
     {
         foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
 
-            if (in_array($scenarioStepObject->getText(), $testFileStepsArray)) {
+            $re = "/(?<=['\"\\(])[^\"()\\n']*?(?=[\\)\"'])/m";
+            preg_match_all($re, $scenarioStepObject->getText(), $matches);
+
+            $parameter = null;
+            $requiredStepName = $scenarioStepObject->getText();
+            if (array_key_exists(0, $matches) && array_key_exists(0, $matches[0])) {
+                $parameter = '"'.$matches[0][0].'"';
+                $requiredStepName = str_replace(' ' . $parameter . '', '', $scenarioStepObject->getText());
+            }
+
+            if (in_array($requiredStepName, $testFileStepsArray)) {
                 $this->output->writeln('<bg=green;options=bold> STEP </> <bg=gray>' . $scenarioStepObject->getText() . '</> IS in the '.$testFilename.' test file');
             } else {
                 $this->output->writeln('<bg=red;options=bold> STEP </> <bg=gray>' . $scenarioStepObject->getText() . '</> is NOT in the '.$testFilename.' test file');
@@ -194,15 +205,28 @@ final class Plugin implements HandlesArguments
 
                 foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
 
-                    $requiredStepName = str_replace(' ', '_', $scenarioStepObject->getText());
+                    $re = "/(?<=['\"\\(])[^\"()\\n']*?(?=[\\)\"'])/m";
+                    preg_match_all($re, $scenarioStepObject->getText(), $matches);
+
+                    $parameter = null;
+                    $parameterField = null;
+                    if (array_key_exists(0, $matches) && array_key_exists(0, $matches[0])) {
+                        $parameter = '"'.$matches[0][0].'"';
+                        $requiredStepName = str_replace(' ' . $parameter . '', '', $scenarioStepObject->getText());
+                        $requiredStepName = str_replace(' ', '_', $requiredStepName);
+                        $parameterField = '$parameter';
+
+                    } else {
+                        $requiredStepName = str_replace(' ', '_', $scenarioStepObject->getText());
+                    }
 
                     //$wit = fwrite($appendVar,PHP_EOL);
-                    $wit = fwrite($appendVar, chr(9).chr(9).'function step_' . $requiredStepName . '()'.PHP_EOL);
+                    $wit = fwrite($appendVar, chr(9).chr(9).'function step_' . $requiredStepName . '('.$parameterField.')'.PHP_EOL);
                     $wit = fwrite($appendVar,chr(9).chr(9).'{'.PHP_EOL);
                     $wit = fwrite($appendVar,chr(9).chr(9).chr(9).'// Insert test for this step here'.PHP_EOL);
                     $wit = fwrite($appendVar,chr(9).chr(9).'}'.PHP_EOL);
                     $wit = fwrite($appendVar,PHP_EOL);
-                    $wit = fwrite($appendVar, chr(9).chr(9).'step_' . $requiredStepName . '();'.PHP_EOL);
+                    $wit = fwrite($appendVar, chr(9).chr(9).'step_' . $requiredStepName . '('.$parameter.');'.PHP_EOL);
                     $wit = fwrite($appendVar,PHP_EOL);
 
                 }
