@@ -11,6 +11,7 @@ use Behat\Gherkin\Node\FeatureNode;
 use Behat\Gherkin\Node\ScenarioNode;
 use Behat\Gherkin\Parser;
 use Pest\Contracts\Plugins\HandlesArguments;
+use Pest\Plugins\Concerns\HandleArguments;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\NodeFinder;
 use PhpParser\ParserFactory;
@@ -25,6 +26,7 @@ use Pest\Support\Str;
  */
 final class Plugin implements HandlesArguments
 {
+    use HandleArguments;
 
     const FEATURE = 'describe';
     const SCENARIO = 'it';
@@ -43,11 +45,10 @@ final class Plugin implements HandlesArguments
 
     }
 
-    public function handleArguments(array $originals): array
+    public function handleArguments(array $arguments): array
     {
-        $input = $this->addArgument($originals);
-        if (! $input->hasParameterOption(sprintf('--%s', self::BDD_OPTION))) {
-            return $originals;
+        if (! $this->hasArgument('--bdd', $arguments)) {
+            return $arguments;
         }
 
         $files = $this->findFiles();
@@ -59,30 +60,7 @@ final class Plugin implements HandlesArguments
         $this->output->writeln('');
         $this->output->writeln('<error>There are ' . $this->errors . ' errors to be fixed</error>');
 
-
-        return $originals;
-    }
-
-    private function addArgument($originals) : ArgvInput
-    {
-        //TODO: not convinced this function is working correctly but the end result works for this version 0.1
-        // Sourced from Pest Watch plugin
-
-        $arguments = array_merge([''], array_values(array_filter($originals, function ($original): bool {
-            return $original === sprintf('--%s', self::BDD_OPTION) || Str::startsWith($original, sprintf('--%s=', self::BDD_OPTION));
-        })));
-
-        $originals = array_flip($originals);
-        foreach ($arguments as $argument) {
-            unset($originals[$argument]);
-        }
-        $originals = array_flip($originals);
-
-        $inputs = [];
-        $inputs[] = new InputOption(self::BDD_OPTION, null, InputOption::VALUE_OPTIONAL, '', true);
-
-        return new ArgvInput($arguments, new InputDefinition($inputs));
-
+        exit(0);
     }
 
     private function gherkin($filename) : FeatureNode
@@ -136,7 +114,7 @@ final class Plugin implements HandlesArguments
     private function findFiles() : array
     {
         // Finds all files in the directory and sub directories under $path
-        $path = 'tests/';
+        $path = 'tests/bdd';
         $directory = new \RecursiveDirectoryIterator($path);
         $iterator = new \RecursiveIteratorIterator($directory);
         $files = array();
