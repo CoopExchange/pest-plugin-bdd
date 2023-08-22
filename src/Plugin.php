@@ -34,7 +34,11 @@ final class Plugin implements HandlesArguments
 
     private const BDD_OPTION = 'bdd';
 
+    private const BDD_PATH = 'tests/bdd/';
+
     private int $errors = 0;
+
+    private bool $createTests = false;
 
     private $featuresArray = [];
     private $scenariosArray = [];
@@ -49,6 +53,10 @@ final class Plugin implements HandlesArguments
     {
         if (! $this->hasArgument('--bdd', $arguments)) {
             return $arguments;
+        }
+
+        if ($this->hasArgument('--create-tests', $arguments)) {
+            $this->createTests = true;
         }
 
         $files = $this->findFiles();
@@ -113,9 +121,7 @@ final class Plugin implements HandlesArguments
 
     private function findFiles() : array
     {
-        // Finds all files in the directory and sub directories under $path
-        $path = 'tests/bdd';
-        $directory = new \RecursiveDirectoryIterator($path);
+        $directory = new \RecursiveDirectoryIterator(self::BDD_PATH);
         $iterator = new \RecursiveIteratorIterator($directory);
         $files = array();
         foreach ($iterator as $info) {
@@ -150,6 +156,72 @@ final class Plugin implements HandlesArguments
         return array_values($filesArray);
     }
 
+    private function createTestFile(string $testFilename, string $featureFileContents)
+    {
+        if($this->createTests !== true) {
+            return;
+        }
+
+        $appendVar = fopen($testFilename,'a');
+
+        // writing new lines to the file
+        $wit = fwrite($appendVar,"<?php".PHP_EOL);
+        $wit = fwrite($appendVar, PHP_EOL);
+
+        $featureObject = $this->gherkin($featureFileContents);
+
+        /*
+         * describe('this is a feature', function () {
+         */
+
+        $wit = fwrite($appendVar,"describe('" . $featureObject->getTitle() . "', function () {".PHP_EOL);
+        $wit = fwrite($appendVar,PHP_EOL);
+
+
+        foreach($featureObject->getScenarios() as $scenarioObject) {
+
+            // Check all scenarios in the feature file have a corresponding 'it' in the test file
+            //$this->output->writeln('Scenario: ' . $scenarioObject->getTitle());
+
+            if (in_array($scenarioObject->getTitle(), $this->scenariosArray)) {
+
+            } else {
+                $this->output->writeln('<bg=red;options=bold> SCENARIO </> "' . $scenarioObject->getTitle() . '" is NOT in the '.$testFilename.' test file');
+                $this->errors++;
+
+                $wit = fwrite($appendVar,chr(9)."it('" . $scenarioObject->getTitle() . "', function () {".PHP_EOL);
+                $wit = fwrite($appendVar,PHP_EOL);
+
+                foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
+
+                    $requiredStepName = str_replace(' ', '_', $scenarioStepObject->getText());
+
+                    //$wit = fwrite($appendVar,PHP_EOL);
+                    $wit = fwrite($appendVar, chr(9).chr(9).'function step_' . $requiredStepName . '()'.PHP_EOL);
+                    $wit = fwrite($appendVar,chr(9).chr(9).'{'.PHP_EOL);
+                    $wit = fwrite($appendVar,chr(9).chr(9).chr(9).'// Insert test for this step here'.PHP_EOL);
+                    $wit = fwrite($appendVar,chr(9).chr(9).'}'.PHP_EOL);
+                    $wit = fwrite($appendVar,PHP_EOL);
+                    $wit = fwrite($appendVar, chr(9).chr(9).'step_' . $requiredStepName . '();'.PHP_EOL);
+                    $wit = fwrite($appendVar,PHP_EOL);
+
+                }
+
+                $wit = fwrite($appendVar,chr(9)."})->todo();".PHP_EOL);
+                $wit = fwrite($appendVar,PHP_EOL);
+
+            }
+
+        }
+
+        $wit = fwrite($appendVar,"});".PHP_EOL);
+        $wit = fwrite($appendVar,PHP_EOL);
+
+        // Closing the file
+        fclose($appendVar);
+
+    }
+
     private function checkFeaturesHaveTestFiles($files)
     {
         $featureFilesArray = $this->getFilteredListofFiles($files, '.feature');
@@ -165,14 +237,17 @@ final class Plugin implements HandlesArguments
 
             if($testFile === FALSE)
             {
-                $this->output->writeln('<bg=red;options=bold> TEST </> ' . $testFilename . ' does not exist');
+                $this->output->writeln('<bg=red;options=bold> TEST </> ' . $testFilename . ' does not exist for Feature: ' . $this->featureName($featureFileContents));
                 $this->errors++;
 
                 $this->processFeatureScenarios($featureFileContents, '');
 
+                $this->createTestFile($testFilename, $featureFileContents);
+
+
             } else {
 
-                $this->output->writeln('<bg=green;options=bold> TEST </> ' . $testFilename . ' exists');
+                $this->output->writeln('<bg=green;options=bold> TEST </> ' . $testFilename . ' exists for Feature: ' . $this->featureName($featureFileContents));
                 // Check test file contains everything in the feature file
 
                 $this->parseTestFile($testFile);
@@ -188,6 +263,12 @@ final class Plugin implements HandlesArguments
 
     }
 
+    private function featureName(string $featureFileContents)
+    {
+        $featureObject = $this->gherkin($featureFileContents);
+        return $featureObject->getTitle();
+    }
+
     private function processFeatureScenarios(string $featureFileContents, string $testFilename)
     {
         $featureObject = $this->gherkin($featureFileContents);
@@ -200,8 +281,14 @@ final class Plugin implements HandlesArguments
             if (in_array($scenarioObject->getTitle(), $this->scenariosArray)) {
                 $this->output->writeln('<bg=green;options=bold> SCENARIO </> <bg=gray>' . $scenarioObject->getTitle() . '</> IS in the '.$testFilename.' test file');
 
+                if (array_key_exists($scenarioObject->getTitle(), $this->stepsArray)) {
+                    $stepsArray = $this->stepsArray[$scenarioObject->getTitle()];
+                } else {
+                    $stepsArray = array();
+                }
+
                 // Check for steps
-                $this->checkForMissingSteps($scenarioObject, $this->stepsArray[$scenarioObject->getTitle()], $testFilename);
+                $this->checkForMissingSteps($scenarioObject, $stepsArray, $testFilename);
 
             } else {
                 $this->output->writeln('<bg=red;options=bold> SCENARIO </> "' . $scenarioObject->getTitle() . '" is NOT in the '.$testFilename.' test file');
