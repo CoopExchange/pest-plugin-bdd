@@ -34,7 +34,7 @@ final class Plugin implements HandlesArguments
 
     private const BDD_OPTION = 'bdd';
 
-    private const BDD_PATH = 'tests/bdd/';
+    private const BDD_PATH = 'tests/Feature/';
 
     private int $errors = 0;
 
