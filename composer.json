@@ -28,7 +28,8 @@
         ]
     },
     "require-dev": {
-        "pestphp/pest-dev-tools": "^2.9"
+        "pestphp/pest-dev-tools": "^2.9",
+        "spatie/ray": "^1.37"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
