@@ -9,7 +9,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 final class FileHandler
 {
     private PestCreator $pestCreator;
-    private PestParser $pestParser;
     private GherkinProcessor $gherkinProcessor;
     private GherkinParser $gherkinParser;
     private readonly OutputHandler $outputHandler;
@@ -21,7 +20,6 @@ final class FileHandler
     public function __construct(private readonly OutputInterface $output)
     {
         $this->pestCreator = new PestCreator();
-        $this->pestParser = new PestParser();
         $this->gherkinProcessor = new GherkinProcessor($output);
         $this->gherkinParser = new GherkinParser();
         $this->outputHandler = new OutputHandler($output);
@@ -63,8 +61,7 @@ final class FileHandler
     private function processTestFile(string $testFilename, string $featureFileContents, string $testFileContents) : void
     {
 
-        $parsedTestFileArray = $this->pestParser->parseTestFile($testFileContents);
-        $this->gherkinProcessor->processFeatureScenarios($featureFileContents, $testFilename, $parsedTestFileArray);
+        $this->gherkinProcessor->processFeatureScenarios($featureFileContents, $testFilename);
     }
 
     public function checkFeaturesHaveTestFiles(bool $createTests = false): int

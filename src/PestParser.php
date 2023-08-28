@@ -3,6 +3,7 @@
 namespace Vmeretail\PestPluginBdd;
 
 use PhpParser\Node\Expr\FuncCall;
+use PhpParser\Node\Stmt\Function_;
 use PhpParser\NodeFinder;
 use PhpParser\ParserFactory;
 
@@ -14,12 +15,20 @@ class PestParser
 
     public function parseTestFile(string $testFileContents) : array
     {
-        $methods = $this->getMethods($testFileContents);
+        $methods = $this->getFuncCallMethods($testFileContents);
+        $functions = $this->getFunctionMethods($testFileContents);
 
         $featuresArray = [];
         $scenariosArray = [];
         $scenariosOpenArray = [];
         $stepsArray = [];
+        $stepsOpenArray = [];
+
+        foreach($functions as $function) {
+            $cleanedStepName = str_replace('step_', '', $function->name->name);
+            $cleanedStepName = str_replace('_', ' ', $cleanedStepName);
+            $stepsOpenArray[$function->name->getStartLine()] = $cleanedStepName;
+        }
 
         foreach($methods as $method) {
 
@@ -56,13 +65,13 @@ class PestParser
 
         }
 
-        return array($featuresArray, $scenariosArray, $stepsArray, $scenariosOpenArray);
+        return array($featuresArray, $scenariosArray, $stepsArray, $scenariosOpenArray, $stepsOpenArray);
 
     }
 
     public function getDescribeDescription(string $testFileContents) : array
     {
-        $methods = $this->getMethods($testFileContents);
+        $methods = $this->getFuncCallMethods($testFileContents);
 
         $describeDescriptionStartText = null;
         $describeDescriptionStartLine = null;
@@ -75,7 +84,6 @@ class PestParser
             switch ($functionName) {
                 case self::FEATURE:
 
-                    //$featuresArray[$method->getEndLine()] = $method->args[0]->value->value;
                     $describeDescriptionObject = $method->args[1]->value->stmts[0]->getComments();
 
                     if(count($describeDescriptionObject) !== 0) {
@@ -92,12 +100,21 @@ class PestParser
         return array($describeDescriptionStartText, $describeDescriptionStartLine, $describeDescriptionEndLine);
     }
 
-    private function getMethods(string $testFileContents)
+    private function getFuncCallMethods(string $testFileContents)
     {
         $parser = (new ParserFactory())->create(ParserFactory::PREFER_PHP7);
         $ast = $parser->parse($testFileContents);
 
         $nodeFinder = new NodeFinder();
         return $nodeFinder->findInstanceOf($ast, FuncCall::class);
+    }
+
+    private function getFunctionMethods(string $testFileContents)
+    {
+        $parser = (new ParserFactory())->create(ParserFactory::PREFER_PHP7);
+        $ast = $parser->parse($testFileContents);
+
+        $nodeFinder = new NodeFinder();
+        return $nodeFinder->findInstanceOf($ast, Function_::class);
     }
 }

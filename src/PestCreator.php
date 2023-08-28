@@ -4,6 +4,7 @@ namespace Vmeretail\PestPluginBdd;
 
 use Behat\Gherkin\Node\OutlineNode;
 use Behat\Gherkin\Node\ScenarioNode;
+use Behat\Gherkin\Node\TableNode;
 
 final class PestCreator
 {
@@ -31,7 +32,7 @@ final class PestCreator
             $tempAddition[] = $this->writeItOpen($scenarioObject);
 
             foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
-                $stepLines = $this->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText());
+                $stepLines = $this->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText(), $scenarioStepObject->getArguments());
                 $tempAddition = array_merge($tempAddition, $stepLines);
             }
 
@@ -73,6 +74,54 @@ final class PestCreator
         $tempAddition[] = chr(9). "]);".PHP_EOL;
 
         return $tempAddition;
+    }
+
+    public function writeStepArgumentTable($tableObject) : string
+    {
+        $tableArray = $tableObject[0]->getTable();
+        $headings = reset($tableArray);
+
+        // TODO check if we need to clean a heading with space and convert i.e. the below
+
+        /*
+        foreach(reset($tableArray) as $heading) {
+
+            $cleanedHeading = str_replace(' ', '_', $heading);
+            $variables.= "string $" . $cleanedHeading . ", ";
+
+        }
+
+        $variables = substr($variables, 0, -2);
+        */
+
+        $key = key($tableArray);
+        unset($tableArray[$key]);
+
+        $data = [];
+
+        foreach($tableArray as $table) {
+
+            $dataLine = [];
+            foreach ($headings as $headingKey => $headingName) {
+
+                $dataLine[$headingName] = $table[$headingKey];
+
+            }
+            $data[] = $dataLine;
+        }
+
+        $lineText = chr(9).chr(9).chr(9).'$data = ['.PHP_EOL;
+        foreach($data as $dataLine) {
+            $lineText.= chr(9).chr(9).chr(9).chr(9). '[';
+            foreach($dataLine as $key => $value) {
+                $lineText.= '"' . $key . '" => \'' . $value . '\', ';
+            }
+            $lineText = substr($lineText, 0, -2);
+            $lineText.= "],".PHP_EOL;
+        }
+        $lineText.= chr(9).chr(9).chr(9)."];".PHP_EOL;
+
+        return $lineText;
     }
 
 
@@ -163,9 +212,9 @@ final class PestCreator
     {
         foreach($editedTestFileLines as $key => $editedTestFileLine) {
 
-            if($key >= ($scenarioEndLineNumber-1) && trim($editedTestFileLine) == "]);") {
+            if($key >= ($scenarioEndLineNumber) && trim($editedTestFileLine) == "]);") {
 
-                $currentLine = ($scenarioEndLineNumber-1);
+                $currentLine = ($scenarioEndLineNumber);
                 while($currentLine <= $key) {
                     unset($editedTestFileLines[$currentLine]);
                     $currentLine++;
@@ -199,8 +248,13 @@ final class PestCreator
         }
     }
 
-    public function writeStep(string $testFilename, string $scenarioTitle, string $scenarioStepTitle) : array
+    public function writeStep(string $testFilename, string $scenarioTitle, string $scenarioStepTitle, $stepArguments) : array
     {
+        $stepArgumentsData = null;
+        if($stepArguments[0] instanceof TableNode) {
+            $stepArgumentsData = $this->writeStepArgumentTable($stepArguments);
+        }
+
         $parameter = null;
         $parameterField = null;
         $requiredStepName = $this->calculateRequiredStepName($scenarioStepTitle);
@@ -211,6 +265,11 @@ final class PestCreator
         $tempAddition = [];
         $tempAddition[] = chr(9).chr(9).'function step_' . $fileHash . '_' . $scenarioHash . '_' . $requiredStepName . '('.$parameterField.')'.PHP_EOL;
         $tempAddition[] = chr(9).chr(9).'{'.PHP_EOL;
+
+        if (!is_null($stepArgumentsData)) {
+            $tempAddition[] = $stepArgumentsData . PHP_EOL;
+        }
+
         $tempAddition[] = chr(9).chr(9).chr(9).'// Insert test for this step here'.PHP_EOL;
         $tempAddition[] = chr(9).chr(9).'}'.PHP_EOL.PHP_EOL;
         $tempAddition[] = chr(9).chr(9).'step_' . $fileHash . '_' . $scenarioHash . '_' . $requiredStepName . '('.$parameter.');'.PHP_EOL.PHP_EOL;

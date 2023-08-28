@@ -34,7 +34,6 @@ class GherkinParser
     public function featureName(string $featureFileContents)
     {
         $featureObject = $this->gherkin($featureFileContents);
-        ray($featureObject);
         return $featureObject->getTitle();
     }
 }
