@@ -186,7 +186,7 @@ final class GherkinProcessor
 
                 // But check if has $data and update it accordingly? (Just like datasets and description)
                 $stepArguments = $scenarioStepObject->getArguments();
-                if($stepArguments[0] instanceof TableNode) {
+                if(array_key_exists(0, $stepArguments) && $stepArguments[0] instanceof TableNode) {
 
                     $r = $this->removeExistingDataFromStep($y, $editedTestFileLines);
                     $stepArgumentsData = $this->pestCreator->writeStepArgumentTable($stepArguments);
@@ -202,7 +202,7 @@ final class GherkinProcessor
                 $this->outputHandler->stepIsNotInTest($scenarioStepObject->getText(), $testFilename);
                 $this->errors++;
 
-                $result = $this->pestCreator->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText());
+                $result = $this->pestCreator->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText(), $scenarioStepObject->getArguments());
                 $tempAddition = array_merge($tempAddition, $result);
 
             }
