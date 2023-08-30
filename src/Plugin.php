@@ -21,10 +21,13 @@ final class Plugin implements HandlesArguments
     private FileHandler $fileHandler;
     private OutputHandler $outputHandler;
 
+    private GherkinProcessor $gherkinProcessor;
+
     public function __construct(private readonly OutputInterface $output)
     {
         $this->fileHandler = new FileHandler($output);
-        $this->outputHandler = new OutputHandler($this->output);
+        $this->outputHandler = new OutputHandler($output);
+        $this->gherkinProcessor = new GherkinProcessor($output);
     }
 
     public function handleArguments(array $arguments): array
@@ -39,7 +42,7 @@ final class Plugin implements HandlesArguments
         }
 
         $missingFeatureFileCount = $this->fileHandler->checkTestsHaveFeatureFiles();
-        $missingTestFileCount = $this->fileHandler->checkFeaturesHaveTestFiles($this->createTests);
+        $missingTestFileCount = $this->gherkinProcessor->checkFeaturesHaveTestFiles($this->createTests);
 
         $this->outputHandler->errorsToBeFixed(($missingFeatureFileCount + $missingTestFileCount));
 

@@ -8,9 +8,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 final class FileHandler
 {
-    private PestCreator $pestCreator;
-    private GherkinProcessor $gherkinProcessor;
-    private GherkinParser $gherkinParser;
     private readonly OutputHandler $outputHandler;
 
     private int $errors = 0;
@@ -19,65 +16,12 @@ final class FileHandler
 
     public function __construct(private readonly OutputInterface $output)
     {
-        $this->pestCreator = new PestCreator();
-        $this->gherkinProcessor = new GherkinProcessor($output);
-        $this->gherkinParser = new GherkinParser();
         $this->outputHandler = new OutputHandler($output);
     }
 
-    private function getTestFilename($featureFilename)
+    public function getTestFilename($featureFilename)
     {
         return str_replace('.feature', '.php', $featureFilename);
-    }
-
-    private function processFeatureFile(string $featureFilename, bool $createTests)
-    {
-        $testFilename = $this->getTestFilename($featureFilename);
-
-        $featureFileContents = @file_get_contents($featureFilename, true);
-        $testFileContents = @file_get_contents($testFilename, true);
-
-        $featureName = $this->gherkinParser->featureName($featureFileContents);
-
-        if($this->checkTestFileExists($testFilename) === FALSE)
-        {
-
-            $this->outputHandler->testDoesNotExist($testFilename, $featureName);
-            $this->errors++;
-
-            if($createTests === true) {
-                $this->pestCreator->createTestFile($testFilename, $featureFileContents);
-            }
-
-        } else {
-
-            $this->outputHandler->testExists($testFilename, $featureName);
-            $this->processTestFile($testFilename, $featureFileContents, $testFileContents);
-
-        }
-
-    }
-
-    private function processTestFile(string $testFilename, string $featureFileContents, string $testFileContents) : void
-    {
-
-        $this->gherkinProcessor->processFeatureScenarios($featureFileContents, $testFilename);
-    }
-
-    public function checkFeaturesHaveTestFiles(bool $createTests = false): int
-    {
-        $featureFilesArray = $this->getFeatureFiles();
-
-        $this->outputHandler->checkingAllFeatureFilesHaveCorrespondingTestFiles(count($featureFilesArray));
-
-        foreach($featureFilesArray as $featureFileName) {
-
-            $this->processFeatureFile($featureFileName, $createTests);
-
-        }
-
-        return $this->errors;
-
     }
 
     public function getFeatureFiles(): array
@@ -149,6 +93,17 @@ final class FileHandler
 
         return $this->errors;
 
+    }
+
+    public function savePestFile(string $testFilename, array $updatedLines) : void
+    {
+        $stringVersionOfArray = implode("", $updatedLines);
+        file_put_contents($testFilename, $stringVersionOfArray);
+    }
+
+    public function openTestFile(string $testFilename) : array
+    {
+        return file($testFilename);
     }
 
 }

@@ -14,47 +14,88 @@ final class GherkinProcessor
 
     private OutputHandler $outputHandler;
 
+    private FileHandler $fileHandler;
+
     private int $errors = 0;
     public function __construct(private readonly OutputInterface $output)
     {
         $this->gherkinParser = new GherkinParser();
-        $this->pestCreator = new PestCreator();
+        $this->pestCreator = new PestCreator($output);
         $this->pestParser = new PestParser();
         $this->outputHandler = new OutputHandler($output);
+        $this->fileHandler = new FileHandler($output);
     }
 
-    private function removeExistingDescriptionFromPestFile(array $describeDescription, array $editedTestFileLines) : array
+    public function checkFeaturesHaveTestFiles(bool $createTests = false): int
     {
-        if (!is_null($describeDescription[0])) {
-            $currentLine = $describeDescription[1] - 1;
-            $endLine = $describeDescription[2];
+        $featureFilesArray = $this->fileHandler->getFeatureFiles();
 
-            while($currentLine <= $endLine) {
-                unset($editedTestFileLines[$currentLine]);
-                $currentLine++;
-            }
+        $this->outputHandler->checkingAllFeatureFilesHaveCorrespondingTestFiles(count($featureFilesArray));
+
+        foreach($featureFilesArray as $featureFileName) {
+
+            $this->processFeatureFile($featureFileName, $createTests);
 
         }
 
-        return $editedTestFileLines;
+        return $this->errors;
+
     }
-
-    private function removeExistingDataFromStep(int $startLine, array $editedTestFileLines) : array
+    private function processFeatureFile(string $featureFilename, bool $createTests)
     {
-        $currentLine = $startLine+1;
-        //$endLine = $describeDescription[2];
-        $endLine = 100; // TODO - set to line number at end of $editedTestFileLines array
+        $testFilename = $this->fileHandler->getTestFilename($featureFilename);
 
-        while($currentLine <= $endLine) {
+        $featureFileContents = @file_get_contents($featureFilename, true);
+        $testFileContents = @file_get_contents($testFilename, true);
 
-            if (trim($editedTestFileLines[$currentLine]) == '];') {
-                $endLine = $currentLine;
+        $featureName = $this->gherkinParser->featureName($featureFileContents);
+
+        if($this->fileHandler->checkTestFileExists($testFilename) === FALSE)
+        {
+
+            $this->outputHandler->testDoesNotExist($testFilename, $featureName);
+            $this->errors++;
+
+            if($createTests === true) {
+                $this->pestCreator->createTestFile($testFilename, $featureFileContents);
             }
-            unset($editedTestFileLines[$currentLine]);
-            $currentLine++;
+
+        } else {
+
+            $this->outputHandler->testExists($testFilename, $featureName);
+            $this->processScenarios($featureFileContents, $testFilename);
+
         }
 
-        return $editedTestFileLines;
+    }
+
+    public function processScenarios(string $featureFileContents, string $testFilename): void
+    {
+        $parsedTestFileArray = $this->pestParser->parseTestFile(file_get_contents($testFilename));
+
+        $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
+
+        $featureObject = $this->gherkinParser->gherkin($featureFileContents);
+        $featuresArray = $parsedTestFileArray[0];
+        $featureEndLineNumber = array_search($featureObject->getTitle(), $featuresArray, true);
+
+        $testFileContents = @file_get_contents($testFilename, true);
+        $describeDescription = $this->pestParser->getDescribeDescription($testFileContents);
+
+        $editedTestFileLines = $this->pestParser->removeExistingDescriptionFromPestFile($describeDescription, $editedTestFileLines);
+
+        // Write feature description (including rules) from feature file, if it exists
+        if(!is_null($featureObject->getDescription())) {
+            $xAddition = $this->pestCreator->writeDescribeDescription($featureObject->getDescription());
+            array_splice($editedTestFileLines, ($featureObject->getLine()+1), 0, $xAddition);
+        }
+
+        $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
+
+        foreach($featureObject->getScenarios() as $scenarioObject) {
+            $editedTestFileLines = $this->processScenario($scenarioObject, $testFilename, $featureEndLineNumber);
+        }
+
     }
 
     private function processScenario($scenarioObject, $testFilename, $featureEndLineNumber)
@@ -71,7 +112,7 @@ final class GherkinProcessor
 
         if (in_array($scenarioObject->getTitle(), $scenariosArray)) {
 
-            $editedTestFileLines = file($testFilename);
+            $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
 
             $this->outputHandler->scenarioIsInTest($scenarioObject->getTitle(), $testFilename);
 
@@ -88,22 +129,21 @@ final class GherkinProcessor
 
                 // Rewrite heading and examples
                 $editedTestFileLines[$scenarioBeginLineNumber-1] = $this->pestCreator->writeItOpen($scenarioObject);
-                $examples = $this->pestCreator->writeOutlineExampleTable($scenarioObject);
+                $examples = $this->pestCreator->createOutlineExampleTable($scenarioObject);
 
                 // Deleting the old dataset
-                $editedTestFileLines = $this->pestCreator->deleteExistingDataset($editedTestFileLines, $scenarioEndLineNumber);
+                $editedTestFileLines = $this->pestParser->deleteExistingDataset($editedTestFileLines, $scenarioEndLineNumber);
                 array_splice($editedTestFileLines, ($scenarioEndLineNumber), 0, $examples);
 
             }
 
-            $allContent = implode("", $editedTestFileLines);
-            file_put_contents($testFilename, $allContent);
+            $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
 
             $this->checkForMissingSteps($scenarioObject, $tempStepsArray, $testFilename, $stepsOpenArray);
 
         } else {
 
-            $editedTestFileLines = file($testFilename);
+            $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
 
             $this->outputHandler->scenarioIsNotInTest($scenarioObject->getTitle(), $testFilename);
             $this->errors++;
@@ -119,68 +159,34 @@ final class GherkinProcessor
             $tempAddition[] = $this->pestCreator->writeItClose($scenarioObject);
 
             if ($scenarioObject instanceof OutlineNode) {
-                $tempAddition = array_merge($tempAddition, $this->pestCreator->writeOutlineExampleTable($scenarioObject));
+                $tempAddition = array_merge($tempAddition, $this->pestCreator->createOutlineExampleTable($scenarioObject));
             }
 
             array_splice($editedTestFileLines, ($featureEndLineNumber-2), 0, $tempAddition);
 
-            $allContent = implode("", $editedTestFileLines);
-            file_put_contents($testFilename, $allContent);
+            $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
 
         }
 
         return $editedTestFileLines;
     }
 
-    public function processFeatureScenarios(string $featureFileContents, string $testFilename): void
-    {
-        $parsedTestFileArray = $this->pestParser->parseTestFile(file_get_contents($testFilename));
-
-        $editedTestFileLines = file($testFilename);
-
-        $featureObject = $this->gherkinParser->gherkin($featureFileContents);
-        $featuresArray = $parsedTestFileArray[0];
-        $featureEndLineNumber = array_search($featureObject->getTitle(), $featuresArray, true);
-
-        $testFileContents = @file_get_contents($testFilename, true);
-        $describeDescription = $this->pestParser->getDescribeDescription($testFileContents);
-
-        $editedTestFileLines = $this->removeExistingDescriptionFromPestFile($describeDescription, $editedTestFileLines);
-
-        // Write feature description (including rules) from feature file, if it exists
-        if(!is_null($featureObject->getDescription())) {
-            $xAddition = $this->pestCreator->writeDescribeDescription($featureObject->getDescription());
-            array_splice($editedTestFileLines, ($featureObject->getLine()+1), 0, $xAddition);
-        }
-
-        $allContent = implode("", $editedTestFileLines);
-        file_put_contents($testFilename, $allContent);
-
-        foreach($featureObject->getScenarios() as $scenarioObject) {
-            $editedTestFileLines = $this->processScenario($scenarioObject, $testFilename, $featureEndLineNumber);
-        }
-
-    }
-
     private function checkForMissingSteps($scenarioObject, array $testFileStepsArray, string $testFilename, array $stepsOpenArray)
     {
+        // TODO: Refactor this function
+
         $tempAddition = [];
 
         foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
 
             // Check if step exists in the pest test file, if not, create it
-            $requiredStepname = $this->pestCreator->calculateRequiredStepName($scenarioStepObject->getText());
-            $fileHash = hash('crc32', $testFilename);
-            $scenarioHash = hash('crc32', $scenarioObject->getTitle());
-            $requiredStepname = str_replace('_', ' ', $requiredStepname);
-            $requiredStepname = $fileHash . ' ' . $scenarioHash . ' ' . $requiredStepname;
+            $requiredStepname = $this->pestCreator->calculateRequiredStepName($scenarioStepObject->getText(), $testFilename, $scenarioObject->getTitle());
 
-
+            $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
 
             if (in_array($requiredStepname, $testFileStepsArray)) {
 
                 $y = array_search($requiredStepname, $stepsOpenArray);
-                $editedTestFileLines = file($testFilename);
 
                 $this->outputHandler->stepIsInTest($scenarioStepObject->getText(), $testFilename);
 
@@ -188,12 +194,12 @@ final class GherkinProcessor
                 $stepArguments = $scenarioStepObject->getArguments();
                 if(array_key_exists(0, $stepArguments) && $stepArguments[0] instanceof TableNode) {
 
-                    $r = $this->removeExistingDataFromStep($y, $editedTestFileLines);
-                    $stepArgumentsData = $this->pestCreator->writeStepArgumentTable($stepArguments);
+                    $r = $this->pestParser->removeExistingDataFromStep($y, $editedTestFileLines);
+                    $stepArgumentsData = $this->pestCreator->convertStepArgumentToString($stepArguments);
                     $data[] = $stepArgumentsData;
                     array_splice($r, ($y+1), 0, $data);
-                    $allContent2 = implode("", $r);
-                    file_put_contents($testFilename, $allContent2);
+
+                    $this->fileHandler->savePestFile($testFilename, $r);
 
                 }
 
@@ -203,7 +209,9 @@ final class GherkinProcessor
                 $this->errors++;
 
                 $result = $this->pestCreator->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText(), $scenarioStepObject->getArguments());
-                $tempAddition = array_merge($tempAddition, $result);
+
+                array_splice($editedTestFileLines, (array_key_last($testFileStepsArray)+1), 0, $result);
+                $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
 
             }
 
@@ -212,4 +220,5 @@ final class GherkinProcessor
         return $tempAddition;
 
     }
+
 }

@@ -25,9 +25,7 @@ class PestParser
         $stepsOpenArray = [];
 
         foreach($functions as $function) {
-            $cleanedStepName = str_replace('step_', '', $function->name->name);
-            $cleanedStepName = str_replace('_', ' ', $cleanedStepName);
-            $stepsOpenArray[$function->name->getStartLine()] = $cleanedStepName;
+            $stepsOpenArray[$function->name->getStartLine()] = $function->name->name;
         }
 
         foreach($methods as $method) {
@@ -50,13 +48,9 @@ class PestParser
 
                         $stepIdentifier = $step->name->parts[0];
 
-                        $stepName = substr($stepIdentifier, 5);
-
                         if(substr($stepIdentifier, 0, 5) == self::STEP) {
 
-                            $cleanedStepName = str_replace('_', ' ', $stepName);
-
-                            $stepsArray[$method->args[0]->value->value][] = $cleanedStepName;
+                            $stepsArray[$method->args[0]->value->value][$step->getEndLine()] = $stepIdentifier;
                         }
 
                     }
@@ -116,5 +110,57 @@ class PestParser
 
         $nodeFinder = new NodeFinder();
         return $nodeFinder->findInstanceOf($ast, Function_::class);
+    }
+
+    public function removeExistingDescriptionFromPestFile(array $describeDescription, array $editedTestFileLines) : array
+    {
+        if (!is_null($describeDescription[0])) {
+            $currentLine = $describeDescription[1] - 1;
+            $endLine = $describeDescription[2];
+
+            while($currentLine <= $endLine) {
+                unset($editedTestFileLines[$currentLine]);
+                $currentLine++;
+            }
+
+        }
+
+        return $editedTestFileLines;
+    }
+
+    public function removeExistingDataFromStep(int $startLine, array $editedTestFileLines) : array
+    {
+        $currentLine = $startLine+1;
+        $endLine = count($editedTestFileLines);
+
+        while($currentLine <= $endLine) {
+
+            if (trim($editedTestFileLines[$currentLine]) == '];') {
+                $endLine = $currentLine;
+            }
+            unset($editedTestFileLines[$currentLine]);
+            $currentLine++;
+        }
+
+        return $editedTestFileLines;
+    }
+
+    public function deleteExistingDataset(array $editedTestFileLines, int $scenarioEndLineNumber) : array
+    {
+        foreach($editedTestFileLines as $key => $editedTestFileLine) {
+
+            if($key >= ($scenarioEndLineNumber) && trim($editedTestFileLine) == "]);") {
+
+                $currentLine = ($scenarioEndLineNumber);
+                while($currentLine <= $key) {
+                    unset($editedTestFileLines[$currentLine]);
+                    $currentLine++;
+                }
+                break;
+            }
+
+        }
+
+        return $editedTestFileLines;
     }
 }
