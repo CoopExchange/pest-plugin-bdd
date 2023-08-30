@@ -152,7 +152,7 @@ final class GherkinProcessor
             $tempAddition[] = $this->pestCreator->writeItOpen($scenarioObject);
 
             foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
-                $stepLines = $this->pestCreator->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText());
+                $stepLines = $this->pestCreator->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText(), $scenarioObject->getArguments());
                 $tempAddition = array_merge($tempAddition, $stepLines);
             }
 
@@ -182,8 +182,6 @@ final class GherkinProcessor
             // Check if step exists in the pest test file, if not, create it
             $requiredStepname = $this->pestCreator->calculateRequiredStepName($scenarioStepObject->getText(), $testFilename, $scenarioObject->getTitle());
 
-            $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
-
             if (in_array($requiredStepname, $testFileStepsArray)) {
 
                 $y = array_search($requiredStepname, $stepsOpenArray);
@@ -192,7 +190,9 @@ final class GherkinProcessor
 
                 // But check if has $data and update it accordingly? (Just like datasets and description)
                 $stepArguments = $scenarioStepObject->getArguments();
-                if(array_key_exists(0, $stepArguments) && $stepArguments[0] instanceof TableNode) {
+                if(array_key_exists(0, $stepArguments)) { // && $stepArguments[0] instanceof TableNode) {
+
+                    $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
 
                     $r = $this->pestParser->removeExistingDataFromStep($y, $editedTestFileLines);
                     $stepArgumentsData = $this->pestCreator->convertStepArgumentToString($stepArguments);
@@ -200,11 +200,15 @@ final class GherkinProcessor
                     array_splice($r, ($y+1), 0, $data);
 
                     $this->fileHandler->savePestFile($testFilename, $r);
+                    $data = [];
 
                 }
 
 
             } else {
+
+                $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
+
                 $this->outputHandler->stepIsNotInTest($scenarioStepObject->getText(), $testFilename);
                 $this->errors++;
 

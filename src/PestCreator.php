@@ -3,6 +3,7 @@
 namespace Vmeretail\PestPluginBdd;
 
 use Behat\Gherkin\Node\OutlineNode;
+use Behat\Gherkin\Node\PyStringNode;
 use Behat\Gherkin\Node\ScenarioNode;
 use Behat\Gherkin\Node\TableNode;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -32,7 +33,6 @@ final class PestCreator
         $newTestFileLinesArray[] = PHP_EOL;
 
         foreach($featureObject->getScenarios() as $scenarioObject) {
-
             $newTestFileLinesArray[] = $this->writeItOpen($scenarioObject);
 
             foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
@@ -82,40 +82,72 @@ final class PestCreator
 
     public function convertStepArgumentToString($stepArguments) : string | null
     {
-        if(!array_key_exists(0, $stepArguments) || !$stepArguments[0] instanceof TableNode) {
+        if(!array_key_exists(0, $stepArguments) ) { // || !$stepArguments[0] instanceof TableNode) {
             return null;
         }
 
-        $tableArray = $stepArguments[0]->getTable();
-        $headings = reset($tableArray);
+        $stepArgument = $stepArguments[0];
 
-        $key = key($tableArray);
-        unset($tableArray[$key]);
+        if ($stepArgument instanceof PyStringNode) {
+            ray('CV11', $stepArgument);
 
-        $data = [];
+            $lineText = $this->createStepVariableString($stepArgument->getStrings());
 
-        foreach($tableArray as $table) {
-
-            $dataLine = [];
-            foreach ($headings as $headingKey => $headingName) {
-
-                $cleanedHeadingName = str_replace(' ', '_', $headingName);
-                $dataLine[$cleanedHeadingName] = $table[$headingKey];
-
-            }
-            $data[] = $dataLine;
         }
 
+        if($stepArgument instanceof TableNode) {
+
+            $tableArray = $stepArguments[0]->getTable();
+            $headings = reset($tableArray);
+
+            $key = key($tableArray);
+            unset($tableArray[$key]);
+
+            $data = [];
+
+            foreach($tableArray as $table) {
+
+                $dataLine = [];
+                foreach ($headings as $headingKey => $headingName) {
+
+                    $cleanedHeadingName = str_replace(' ', '_', $headingName);
+                    $dataLine[$cleanedHeadingName] = $table[$headingKey];
+
+                }
+                $data[] = $dataLine;
+            }
+
+            $lineText = $this->createStepVariableString($data);
+
+        }
+
+
+        return $lineText;
+    }
+
+    private function createStepVariableString($data)
+    {
         $lineText = chr(9).chr(9).chr(9).'$data = ['.PHP_EOL;
         foreach($data as $dataLine) {
+
             $lineText.= chr(9).chr(9).chr(9).chr(9). '[';
-            foreach($dataLine as $key => $value) {
-                $lineText.= '"' . $key . '" => \'' . $value . '\', ';
+
+            // If its an array or if its a string
+            if(is_array($dataLine)) {
+                foreach($dataLine as $key => $value) {
+                    $lineText.= '"' . $key . '" => \'' . $value . '\', ';
+                }
+            } else {
+                $lineText.= '"' . $dataLine . '"';
             }
-            $lineText = substr($lineText, 0, -2);
+
+            //$lineText = substr($lineText, 0, -2);
             $lineText.= "],".PHP_EOL;
+
         }
         $lineText.= chr(9).chr(9).chr(9)."];".PHP_EOL;
+
+        ray('BED2', $lineText);
 
         return $lineText;
     }
@@ -219,14 +251,7 @@ final class PestCreator
         $scenarioHash = hash('crc32', $scenarioTitle);
         //$requiredStepname = str_replace('_', ' ', $x);
         $requiredStepname = 'step_' . $fileHash . '_' . $scenarioHash . '_' . $x;
-
-        /*
-        $requiredStepName = $this->calculateRequiredStepName($scenarioStepTitle);
-
-        $fileHash = hash('crc32', $testFilename);
-        $scenarioHash = hash('crc32', $scenarioTitle);
-        $stepName = 'step_' . $fileHash . '_' . $scenarioHash . '_' . $requiredStepName;
-        */
+        $requiredStepname = str_replace(':', '', $requiredStepname);
 
         return $requiredStepname;
     }

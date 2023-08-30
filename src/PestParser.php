@@ -130,7 +130,7 @@ class PestParser
 
     public function removeExistingDataFromStep(int $startLine, array $editedTestFileLines) : array
     {
-        $currentLine = $startLine+1;
+        $currentLine = $startLine;
         $endLine = count($editedTestFileLines);
 
         while($currentLine <= $endLine) {
@@ -138,7 +138,9 @@ class PestParser
             if (trim($editedTestFileLines[$currentLine]) == '];') {
                 $endLine = $currentLine;
             }
-            unset($editedTestFileLines[$currentLine]);
+            if (trim($editedTestFileLines[$currentLine]) != '{') {
+                unset($editedTestFileLines[$currentLine]);
+            }
             $currentLine++;
         }
 
