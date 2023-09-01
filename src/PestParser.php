@@ -13,7 +13,7 @@ class PestParser
     const SCENARIO = 'it';
     const STEP = 'step_';
 
-    public function parseTestFile(string $testFileContents) : array
+    public function parseTestFileIntoArrays(string $testFileContents) : array
     {
         $methods = $this->getFuncCallMethods($testFileContents);
         $functions = $this->getFunctionMethods($testFileContents);

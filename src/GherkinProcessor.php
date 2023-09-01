@@ -2,6 +2,7 @@
 
 namespace Vmeretail\PestPluginBdd;
 
+use Behat\Gherkin\Node\BackgroundNode;
 use Behat\Gherkin\Node\OutlineNode;
 use Behat\Gherkin\Node\TableNode;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -71,7 +72,7 @@ final class GherkinProcessor
 
     public function processScenarios(string $featureFileContents, string $testFilename): void
     {
-        $parsedTestFileArray = $this->pestParser->parseTestFile(file_get_contents($testFilename));
+        $parsedTestFileArray = $this->pestParser->parseTestFileIntoArrays(file_get_contents($testFilename));
 
         $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
 
@@ -92,15 +93,60 @@ final class GherkinProcessor
 
         $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
 
+        // TODO: Handle edits to background which is just like a scenario - also fix quotes in step name (fix $parameter and $parameterField)
+
+        if ($featureObject->getBackground() instanceof BackgroundNode) {
+            //$backgroundLines = $this->processBackground($featureObject->getBackground(), $testFilename, $tempStepsArray, $stepsOpenArray);
+        }
+
         foreach($featureObject->getScenarios() as $scenarioObject) {
             $editedTestFileLines = $this->processScenario($scenarioObject, $testFilename, $featureEndLineNumber);
         }
 
     }
 
+    private function processBackground($backgroundObject, $testFilename, $tempStepsArray, $stepsOpenArray)
+    {
+
+
+
+        if (array_key_exists($backgroundObject->getTitle(), $stepsArray)) {
+            $tempStepsArray = $stepsArray[$scenarioObject->getTitle()];
+        } else {
+            $tempStepsArray = array();
+        }
+
+
+
+        //$editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
+        $this->checkForMissingSteps($backgroundObject->getSteps(), $backgroundObject->getTitle(), $tempStepsArray, $testFilename, $stepsOpenArray);
+
+        /*
+        $tempArray = [];
+        $tempArray[] = $this->writeBeforeEachOpen();
+
+        foreach($backgroundNode->getSteps() as $stepObject) {
+            $stepLines = $this->writeStep($testFilename, 'Background', $stepObject->getText(), $stepObject->getArguments());
+            $tempArray = array_merge($tempArray, $stepLines);
+        }
+
+        $tempArray[] = $this->writeBeforeEachClose();
+        */
+
+        return null;
+        // return $tempArray;
+
+       //$backgroundLines = 1;
+
+        // $newTestFileLinesArray = array_merge($editedTestFileLines, $tempArray);
+        // Change to edit?
+
+        //$this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
+    }
+
     private function processScenario($scenarioObject, $testFilename, $featureEndLineNumber)
     {
-        $parsedTestFileArray = $this->pestParser->parseTestFile(file_get_contents($testFilename));
+        $parsedTestFileArray = $this->pestParser->parseTestFileIntoArrays(file_get_contents($testFilename));
 
         // The index number is the EndLine of the scenario ('it' in pest language)
         $scenariosArray = $parsedTestFileArray[1];
@@ -139,7 +185,7 @@ final class GherkinProcessor
 
             $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
 
-            $this->checkForMissingSteps($scenarioObject, $tempStepsArray, $testFilename, $stepsOpenArray);
+            $this->checkForMissingSteps($scenarioObject->getSteps(), $scenarioObject->getTitle(), $tempStepsArray, $testFilename, $stepsOpenArray);
 
         } else {
 
@@ -171,18 +217,33 @@ final class GherkinProcessor
         return $editedTestFileLines;
     }
 
-    private function checkForMissingSteps($scenarioObject, array $testFileStepsArray, string $testFilename, array $stepsOpenArray)
+    private function checkForMissingSteps($stepsObjectArray, $stepTitle, array $testFileStepsArray, string $testFilename, array $stepsOpenArray)
     {
         // TODO: Refactor this function
+        // TODO: CHANGE THIS TO ARRAY OF STEPS INSTEAD OF $SCENARIOOBJECT SO I CAN PASS IN BACKGRROUND STEPS AS WELL
 
         $tempAddition = [];
 
-        foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
+        foreach ($stepsObjectArray as $scenarioStepObject) {
 
             // Check if step exists in the pest test file, if not, create it
-            $requiredStepname = $this->pestCreator->calculateRequiredStepName($scenarioStepObject->getText(), $testFilename, $scenarioObject->getTitle());
+            $requiredStepNameArray = $this->pestCreator->calculateRequiredStepName($scenarioStepObject->getText(), $testFilename, $stepTitle);
+            $requiredStepname = $requiredStepNameArray[0];
+            $parameterString = $requiredStepNameArray[1];
+            $parameterFields = $requiredStepNameArray[2];
 
             if (in_array($requiredStepname, $testFileStepsArray)) {
+
+                if(str_contains($requiredStepname, 'parameter')) {
+
+                    // If contains the phrase "parameter" then rewrite that specific line (including the parameters)
+                    $t = array_search($requiredStepname, $testFileStepsArray);
+
+                    $editedTestFileLines1 = $this->fileHandler->openTestFile($testFilename);
+                    $editedTestFileLines1[$t-1] = chr(9).chr(9) . $requiredStepname . '('.$parameterString.');'.PHP_EOL;
+                    $this->fileHandler->savePestFile($testFilename, $editedTestFileLines1);
+
+                }
 
                 $y = array_search($requiredStepname, $stepsOpenArray);
 
@@ -190,6 +251,7 @@ final class GherkinProcessor
 
                 // But check if has $data and update it accordingly? (Just like datasets and description)
                 $stepArguments = $scenarioStepObject->getArguments();
+                ray('GH32', $requiredStepname, $stepArguments);
                 if(array_key_exists(0, $stepArguments)) { // && $stepArguments[0] instanceof TableNode) {
 
                     $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
@@ -204,7 +266,6 @@ final class GherkinProcessor
 
                 }
 
-
             } else {
 
                 $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
@@ -212,7 +273,7 @@ final class GherkinProcessor
                 $this->outputHandler->stepIsNotInTest($scenarioStepObject->getText(), $testFilename);
                 $this->errors++;
 
-                $result = $this->pestCreator->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText(), $scenarioStepObject->getArguments());
+                $result = $this->pestCreator->writeStep($testFilename, $stepTitle, $scenarioStepObject->getText(), $scenarioStepObject->getArguments());
 
                 array_splice($editedTestFileLines, (array_key_last($testFileStepsArray)+1), 0, $result);
                 $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);

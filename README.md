@@ -183,3 +183,5 @@ Background are inserted into beforeEach function within each feature (actually w
 -[ ] Groups / Tags - set `@something` in the gherkin to `->group('something')` or `@something @somethingelse` in the gherkin to `->group('something', 'somethingelse')`
 -[ ] As above for tags for whole files `uses()->group('feature');`
 -[ ] Before each before all etc - and maybe after each and after all?
+-[ ] Report on functions within an 'it' but NOT with an equivalent step in the feature file
+-[ ] handle editing steps with parameters (at the moment it creates a new step/function)

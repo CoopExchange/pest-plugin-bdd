@@ -2,6 +2,7 @@
 
 namespace Vmeretail\PestPluginBdd;
 
+use Behat\Gherkin\Node\BackgroundNode;
 use Behat\Gherkin\Node\OutlineNode;
 use Behat\Gherkin\Node\PyStringNode;
 use Behat\Gherkin\Node\ScenarioNode;
@@ -20,6 +21,21 @@ final class PestCreator
         $this->fileHandler = new FileHandler($output);
     }
 
+    public function processBackground(BackgroundNode $backgroundNode, string $testFilename) : array
+    {
+        $tempArray = [];
+        $tempArray[] = $this->writeBeforeEachOpen();
+
+        foreach($backgroundNode->getSteps() as $stepObject) {
+            $stepLines = $this->writeStep($testFilename, 'Background', $stepObject->getText(), $stepObject->getArguments());
+            $tempArray = array_merge($tempArray, $stepLines);
+        }
+
+        $tempArray[] = $this->writeBeforeEachClose();
+
+        return $tempArray;
+    }
+
     public function createTestFile(string $testFilename, string $featureFileContents): void
     {
 
@@ -31,6 +47,11 @@ final class PestCreator
         $description = $this->writeDescribeDescription($featureObject->getDescription());
         $newTestFileLinesArray = array_merge($newTestFileLinesArray, $description);
         $newTestFileLinesArray[] = PHP_EOL;
+
+        if ($featureObject->getBackground() instanceof BackgroundNode) {
+            $backgroundLines = $this->processBackground($featureObject->getBackground(), $testFilename);
+            $newTestFileLinesArray = array_merge($newTestFileLinesArray, $backgroundLines);
+        }
 
         foreach($featureObject->getScenarios() as $scenarioObject) {
             $newTestFileLinesArray[] = $this->writeItOpen($scenarioObject);
@@ -185,6 +206,14 @@ final class PestCreator
         return "});".PHP_EOL.PHP_EOL;
     }
 
+    public function writeBeforeEachOpen() : string
+    {
+
+        $beforeEachOpenString = chr(9)."beforeEach(function () {".PHP_EOL.PHP_EOL;
+        return $beforeEachOpenString;
+
+    }
+
     public function writeItOpen($scenarioObject) : string
     {
         if($scenarioObject instanceof ScenarioNode) {
@@ -215,6 +244,11 @@ final class PestCreator
 
     }
 
+    public function writeBeforeEachClose() : string
+    {
+        return chr(9)."});".PHP_EOL.PHP_EOL;
+    }
+
     public function writeItClose($scenarioObject) : string
     {
         if($scenarioObject instanceof ScenarioNode) {
@@ -227,50 +261,80 @@ final class PestCreator
 
     }
 
-    public function calculateRequiredStepName(string $stepName, string $testFilename, string $scenarioTitle) : string
+    public function calculateRequiredStepName(string $stepName, string $testFilename, string $scenarioTitle)
     {
-        // Strip out bad characters that will make the function break - for now, only commas
+        // Strip out bad characters that will make the function break - for now, only commas and :
         $stepName = str_replace(',', '', $stepName);
+        $stepName = str_replace(':', '', $stepName);
+        $stepName = str_replace('-', '_', $stepName);
+
+        $parameterString = null;
+        $parameterFields = null;
+
+        //ray('INPUT STEP NAME', $stepName);
 
         $re = "/(?<=['\"\\(])[^\"()\\n']*?(?=[\\)\"'])/m";
         preg_match_all($re, $stepName, $matches);
 
-        $parameter = null;
-        $parameterField = null;
         if (array_key_exists(0, $matches) && array_key_exists(0, $matches[0])) {
-            $parameter = '"'.$matches[0][0].'"';
-            $requiredStepName = str_replace(' ' . $parameter . '', '', $stepName);
-            $requiredStepName = str_replace(' ', '_', $requiredStepName);
-            $parameterField = '$parameter'; // TODO: fix parameters
-            $x = $requiredStepName;
+
+            foreach($matches[0] as $key => $match) {
+
+                // Ignore odd items in the array (as they are the middle between vars)
+                if($key&1) {
+                    unset($matches[0][$key]);
+                    continue;
+                }
+
+            }
+
+            $parameters = array_values($matches[0]);
+
+            // Now convert the stepName
+            foreach($parameters as $key => $match) {
+
+                $stepName = str_replace($match, 'parameter' . $key, $stepName);
+                $parameterFields.= '$parameter'.$key.', ';
+                $parameterString.= '"'.$match.'", ';
+
+            }
+
+            $stepName = str_replace('"', '', $stepName);
+
+            ray('XCV2', $stepName, $parameters);
+
+            $parameterFields = substr($parameterFields, 0, -2);
+            $parameterString = substr($parameterString, 0, -2);
+
         } else {
-            $x = str_replace(' ', '_', $stepName);
+            $stepName = str_replace(' ', '_', $stepName);
         }
 
         $fileHash = hash('crc32', $testFilename);
         $scenarioHash = hash('crc32', $scenarioTitle);
-        //$requiredStepname = str_replace('_', ' ', $x);
-        $requiredStepname = 'step_' . $fileHash . '_' . $scenarioHash . '_' . $x;
-        $requiredStepname = str_replace(':', '', $requiredStepname);
 
-        return $requiredStepname;
+        $requiredStepName = str_replace(' ', '_', $stepName);
+        $requiredStepname = 'step_' . $fileHash . '_' . $scenarioHash . '_' . $requiredStepName;
+
+        return [$requiredStepname, $parameterString, $parameterFields];
     }
 
     public function writeStep(string $testFilename, string $scenarioTitle, string $scenarioStepTitle, $stepArguments) : array
     {
-        $parameter = null; // TODO: Check this works
-        $parameterField = null; // TODO: Check this works
-        $requiredStepName = $this->calculateRequiredStepName($scenarioStepTitle, $testFilename, $scenarioTitle);
+        $requiredStepNameArray = $this->calculateRequiredStepName($scenarioStepTitle, $testFilename, $scenarioTitle);
+        $requiredStepName = $requiredStepNameArray[0];
+        $parameterString = $requiredStepNameArray[1];
+        $parameterFields = $requiredStepNameArray[2];
 
         $tempAddition = [];
-        $tempAddition[] = chr(9).chr(9).'function ' . $requiredStepName . '('.$parameterField.')'.PHP_EOL;
+        $tempAddition[] = chr(9).chr(9).'function ' . $requiredStepName . '('.$parameterFields.')'.PHP_EOL;
         $tempAddition[] = chr(9).chr(9).'{'.PHP_EOL;
 
         $tempAddition[] = $this->convertStepArgumentToString($stepArguments) . PHP_EOL;
 
         $tempAddition[] = chr(9).chr(9) . chr(9) . '// Insert test for this step here'.PHP_EOL;
         $tempAddition[] = chr(9).chr(9) .'}' . PHP_EOL . PHP_EOL;
-        $tempAddition[] = chr(9).chr(9) . $requiredStepName . '('.$parameter.');'. PHP_EOL . PHP_EOL;
+        $tempAddition[] = chr(9).chr(9) . $requiredStepName . '('.$parameterString.');'. PHP_EOL . PHP_EOL;
 
         return $tempAddition;
     }
