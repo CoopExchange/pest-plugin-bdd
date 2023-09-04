@@ -15,9 +15,11 @@
     "require": {
         "php": "^8.1",
         "behat/gherkin": "v4.9.0",
+        "illuminate/collections": "^10.21",
         "nikic/php-parser": "^4.17",
         "pestphp/pest": "^2.5",
-        "pestphp/pest-plugin": "^2.0.1"
+        "pestphp/pest-plugin": "^2.0.1",
+        "spatie/laravel-data": "^3.8"
     },
     "autoload": {
         "psr-4": {

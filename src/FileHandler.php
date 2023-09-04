@@ -71,6 +71,11 @@ final class FileHandler
         return file_exists($featureFilename);
     }
 
+    public function getTestFile(string $testFilename) : string
+    {
+        return file_get_contents($testFilename);
+    }
+
     public function checkTestsHaveFeatureFiles(): int
     {
         $testFilesArray = $this->getTestFiles();

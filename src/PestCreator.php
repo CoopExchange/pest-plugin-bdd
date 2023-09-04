@@ -27,7 +27,7 @@ final class PestCreator
         $tempArray[] = $this->writeBeforeEachOpen();
 
         foreach($backgroundNode->getSteps() as $stepObject) {
-            $stepLines = $this->writeStep($testFilename, 'Background', $stepObject->getText(), $stepObject->getArguments());
+            $stepLines = $this->writeStep($testFilename, PestParser::BACKGROUND, $stepObject->getText(), $stepObject->getArguments());
             $tempArray = array_merge($tempArray, $stepLines);
         }
 
@@ -110,7 +110,7 @@ final class PestCreator
         $stepArgument = $stepArguments[0];
 
         if ($stepArgument instanceof PyStringNode) {
-            ray('CV11', $stepArgument);
+            //ray('CV11', $stepArgument);
 
             $lineText = $this->createStepVariableString($stepArgument->getStrings());
 
@@ -168,7 +168,7 @@ final class PestCreator
         }
         $lineText.= chr(9).chr(9).chr(9)."];".PHP_EOL;
 
-        ray('BED2', $lineText);
+        //ray('BED2', $lineText);
 
         return $lineText;
     }
@@ -203,7 +203,7 @@ final class PestCreator
 
     private function writeDescribeClose(): string
     {
-        return "});".PHP_EOL.PHP_EOL;
+        return PHP_EOL.PHP_EOL."});";
     }
 
     public function writeBeforeEachOpen() : string
@@ -240,6 +240,10 @@ final class PestCreator
 
         }
 
+        if($scenarioObject instanceof BackgroundNode) {
+            $itOpenString = chr(9)."beforeEach(function () {".PHP_EOL;
+        }
+
         return $itOpenString;
 
     }
@@ -257,6 +261,10 @@ final class PestCreator
 
         if($scenarioObject instanceof OutlineNode) {
             return chr(9).  "})->todo()->with([".PHP_EOL;
+        }
+
+        if($scenarioObject instanceof BackgroundNode) {
+            return chr(9).  "});".PHP_EOL;
         }
 
     }
@@ -301,7 +309,7 @@ final class PestCreator
 
             $stepName = str_replace('"', '', $stepName);
 
-            ray('XCV2', $stepName, $parameters);
+            //ray('XCV2', $stepName, $parameters);
 
             $parameterFields = substr($parameterFields, 0, -2);
             $parameterString = substr($parameterString, 0, -2);
@@ -313,10 +321,12 @@ final class PestCreator
         $fileHash = hash('crc32', $testFilename);
         $scenarioHash = hash('crc32', $scenarioTitle);
 
-        $requiredStepName = str_replace(' ', '_', $stepName);
-        $requiredStepname = 'step_' . $fileHash . '_' . $scenarioHash . '_' . $requiredStepName;
+        $uniqueIdentifier = $fileHash . '_' . $scenarioHash;
 
-        return [$requiredStepname, $parameterString, $parameterFields];
+        $requiredStepName = str_replace(' ', '_', $stepName);
+        $requiredStepname = 'step_' . $uniqueIdentifier . '_' . $requiredStepName;
+
+        return [$requiredStepname, $parameterString, $parameterFields, $uniqueIdentifier];
     }
 
     public function writeStep(string $testFilename, string $scenarioTitle, string $scenarioStepTitle, $stepArguments) : array

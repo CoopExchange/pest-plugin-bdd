@@ -11,12 +11,12 @@ class OutputHandler
 
     }
 
-    public function testDoesNotExist(string $testFilename, string $featureName) : void
+    public function testFileDoesNotExist(string $testFilename, string $featureName) : void
     {
         $this->output->writeln('<bg=red;options=bold> TEST </> ' . $testFilename . ' does not exist for Feature: ' . $featureName);
     }
 
-    public function testExists(string $testFilename, string $featureName) : void
+    public function testFileExists(string $testFilename, string $featureName) : void
     {
         $this->output->writeln('<bg=green;options=bold> TEST </> ' . $testFilename . ' exists for Feature: ' . $featureName);
     }
