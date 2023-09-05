@@ -6,6 +6,7 @@ use Behat\Gherkin\Node\BackgroundNode;
 use Behat\Gherkin\Node\OutlineNode;
 use Behat\Gherkin\Node\ScenarioInterface;
 use Behat\Gherkin\Node\TableNode;
+use Illuminate\Support\Collection;
 use Symfony\Component\Console\Output\OutputInterface;
 use Vmeretail\PestPluginBdd\Models\PestScenario;
 use Vmeretail\PestPluginBdd\Models\PestStep;
@@ -50,7 +51,6 @@ final class GherkinProcessor
         $testFilename = $this->fileHandler->getTestFilename($featureFilename);
 
         $featureFileContents = @file_get_contents($featureFilename, true);
-        //$testFileContents = @file_get_contents($testFilename, true);
 
         $featureName = $this->gherkinParser->featureName($featureFileContents);
 
@@ -83,8 +83,6 @@ final class GherkinProcessor
             $featureObject->getLine()
         );
 
-        // Find feature and get the end line number from it
-
         if ($featureObject->getBackground() instanceof BackgroundNode) {
             $this->processScenario(
                 $featureObject->getBackground(),
@@ -103,17 +101,18 @@ final class GherkinProcessor
 
     }
 
-    private function updateTestFileDescription($testFilename, $featureDescription, $lineNumber)
+    private function updateTestFileDescription(string $testFilename, string $featureDescription, int $lineNumber) : void
     {
-        $testFileContents = @file_get_contents($testFilename, true);
+        $testFileContents = $this->fileHandler->getTestFile($testFilename);
         $describeDescription = $this->pestParser->getDescribeDescription($testFileContents);
 
         $testFileLines = $this->fileHandler->openTestFile($testFilename);
         $testFileLines = $this->pestParser->removeExistingDescriptionFromPestFile($describeDescription, $testFileLines);
 
+
         if(!is_null($featureDescription)) {
-            $xAddition = $this->pestCreator->writeDescribeDescription($featureDescription);
-            array_splice($testFileLines, ($lineNumber+1), 0, $xAddition);
+
+            $testFileLines->splice(($lineNumber+1), 0, $this->pestCreator->writeDescribeDescription($featureDescription));
         }
 
         $this->fileHandler->savePestFile($testFilename, $testFileLines);
@@ -130,24 +129,15 @@ final class GherkinProcessor
 
         if ($scenarioLikeObject instanceof OutlineNode) {
 
-            // Rewrite heading and examples
-            $editedTestFileLines[$scenarioBeginLineNumber-1] = $this->pestCreator->writeItOpen($scenarioLikeObject);
-            $examples = $this->pestCreator->createOutlineExampleTable($scenarioLikeObject);
-
-            // Deleting the old dataset
+            $editedTestFileLines->put($scenarioBeginLineNumber-1, $this->pestCreator->writeItOpen($scenarioLikeObject));
             $editedTestFileLines = $this->pestParser->deleteExistingDataset($editedTestFileLines, $scenarioEndLineNumber);
-            array_splice($editedTestFileLines, ($scenarioEndLineNumber), 0, $examples);
+            $editedTestFileLines->splice($scenarioEndLineNumber, 0, $this->pestCreator->createOutlineExampleTable($scenarioLikeObject));
 
         }
 
         $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
 
-        //$this->checkForMissingSteps($scenarioLikeObject->getSteps(), $scenarioLikeTitle, $tempStepsArray, $testFilename, $stepsOpenArray);
-
-        //if($scenarioLikeTitle == 'beforeEach') {
-            //ray('$scenarioLikeTitle is beforeEach');
-            $this->checkForMissingSteps($scenarioLikeObject->getSteps(), $pestScenario->steps, $scenarioLikeTitle, $testFilename, $pestScenario->endLine);
-        //}
+        $this->checkForMissingSteps($scenarioLikeObject->getSteps(), $pestScenario->steps, $scenarioLikeTitle, $testFilename, $pestScenario->endLine);
 
     }
 
@@ -158,27 +148,27 @@ final class GherkinProcessor
         $this->outputHandler->scenarioIsNotInTest($scenarioLikeTitle, $testFilename);
         $this->errors++;
 
-        $tempAddition = [];
-        $tempAddition[] = $this->pestCreator->writeItOpen($scenarioLikeObject);
+        $tempAddition = new Collection();
+        $tempAddition->push($this->pestCreator->writeItOpen($scenarioLikeObject));
 
         foreach ($scenarioLikeObject->getSteps() as $scenarioStepObject) {
 
-            $stepArguments = [];
             if(!$scenarioLikeObject instanceof BackgroundNode) {
                 $stepArguments = $scenarioStepObject->getArguments();
             }
 
-            $stepLines = $this->pestCreator->writeStep($testFilename, $scenarioLikeTitle, $scenarioStepObject->getText(), $stepArguments);
-            $tempAddition = array_merge($tempAddition, $stepLines);
+            $tempAddition->push(
+                $this->pestCreator->writeStep($testFilename, $scenarioLikeTitle, $scenarioStepObject->getText(), $stepArguments)
+            );
         }
 
-        $tempAddition[] = $this->pestCreator->writeItClose($scenarioLikeObject);
+        $tempAddition->push($this->pestCreator->writeItClose($scenarioLikeObject));
 
         if ($scenarioLikeObject instanceof OutlineNode) {
-            $tempAddition = array_merge($tempAddition, $this->pestCreator->createOutlineExampleTable($scenarioLikeObject));
+            $tempAddition->push($this->pestCreator->createOutlineExampleTable($scenarioLikeObject));
         }
 
-        array_splice($editedTestFileLines, ($featureEndLineNumber-1), 0, $tempAddition);
+        $editedTestFileLines->splice(($featureEndLineNumber-1), 0, $tempAddition);
 
         $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
     }
@@ -186,34 +176,30 @@ final class GherkinProcessor
     private function processScenario($scenarioLikeObject, $testFilename, $featureEndLineNumber)
     {
 
+        // TODO: Get rid of this
         if(is_null($scenarioLikeObject->getTitle())) {
             $scenarioLikeTitle = 'beforeEach';
         } else {
             $scenarioLikeTitle = $scenarioLikeObject->getTitle();
         }
 
-        $scenariosArray = $this->pestParser->getScenarios($this->fileHandler->getTestFile($testFilename));
-
-        //ray('WERE1', $scenarioLikeTitle, $scenariosArray);
-
-        $pestScenario = $scenariosArray->filter(function ($item) use ($scenarioLikeTitle) {
+        $pestScenario = $this->pestParser->getScenarios($this->fileHandler->getTestFile($testFilename))
+            ->filter(function ($item) use ($scenarioLikeTitle) {
             return $item->name == $scenarioLikeTitle;
-        })->first();
+        })
+            ->first();
 
         // There is an equivalent scenario (it or beforeEach) in the Pest file
         if ($pestScenario instanceof PestScenario) {
-            //ray('compareFunctionScenarioToPestScenario: ' . $scenarioLikeTitle);
 
             $this->compareFunctionScenarioToPestScenario($testFilename, $scenarioLikeTitle, $pestScenario, $scenarioLikeObject);
 
         } else {
 
-            //ray('addMissingPestScenario: ' . $scenarioLikeTitle);
             $this->addMissingPestScenario($testFilename, $scenarioLikeTitle, $scenarioLikeObject, $featureEndLineNumber);
 
         }
 
-        //return $editedTestFileLines;
         return null;
     }
 
@@ -228,12 +214,13 @@ final class GherkinProcessor
     {
         $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
 
-        $r = $this->pestParser->removeExistingDataFromStep($y, $editedTestFileLines);
-        $stepArgumentsData = $this->pestCreator->convertStepArgumentToString($stepArguments);
-        $data[] = $stepArgumentsData;
-        array_splice($r, $y, 0, $data);
+        $editedTestFileLines = $this->pestParser->removeExistingDataFromStep($y, $editedTestFileLines);
+        //$stepArgumentsData = $this->pestCreator->convertStepArgumentToString($stepArguments);
+        //$data[] = $stepArgumentsData;
+        //array_splice($r, $y, 0, $data);
+        $editedTestFileLines->splice($y, 0, $this->pestCreator->convertStepArgumentToString($stepArguments));
 
-        $this->fileHandler->savePestFile($testFilename, $r);
+        $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
     }
 
     private function addMissingPestStep($testFilename, $scenarioTitle, $scenarioStepObject, $endLine)

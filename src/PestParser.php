@@ -260,14 +260,14 @@ class PestParser
         return $nodeFinder->findInstanceOf($ast, Function_::class);
     }
 
-    public function removeExistingDescriptionFromPestFile(array $describeDescription, array $editedTestFileLines) : array
+    public function removeExistingDescriptionFromPestFile(array $describeDescription, Collection $editedTestFileLines) : Collection
     {
         if (!is_null($describeDescription[0])) {
-            $currentLine = $describeDescription[1] - 1;
+            $currentLine = $describeDescription[1] -1;
             $endLine = $describeDescription[2];
 
-            while($currentLine <= $endLine) {
-                unset($editedTestFileLines[$currentLine]);
+            while($currentLine < $endLine) {
+                $editedTestFileLines->forget($currentLine);
                 $currentLine++;
             }
 
@@ -276,7 +276,7 @@ class PestParser
         return $editedTestFileLines;
     }
 
-    public function removeExistingDataFromStep(int $startLine, array $editedTestFileLines) : array
+    public function removeExistingDataFromStep(int $startLine, Collection $editedTestFileLines) : Collection
     {
         $currentLine = $startLine;
         $endLine = count($editedTestFileLines);
@@ -287,7 +287,8 @@ class PestParser
                 $endLine = $currentLine;
             }
             if (trim($editedTestFileLines[$currentLine]) != '{') {
-                unset($editedTestFileLines[$currentLine]);
+                //unset($editedTestFileLines[$currentLine]);
+                $editedTestFileLines->forget($currentLine);
             }
             $currentLine++;
         }
@@ -295,7 +296,7 @@ class PestParser
         return $editedTestFileLines;
     }
 
-    public function deleteExistingDataset(array $editedTestFileLines, int $scenarioEndLineNumber) : array
+    public function deleteExistingDataset(Collection $editedTestFileLines, int $scenarioEndLineNumber) : Collection
     {
         foreach($editedTestFileLines as $key => $editedTestFileLine) {
 
@@ -303,7 +304,8 @@ class PestParser
 
                 $currentLine = ($scenarioEndLineNumber);
                 while($currentLine <= $key) {
-                    unset($editedTestFileLines[$currentLine]);
+                    //unset($editedTestFileLines[$currentLine]);
+                    $editedTestFileLines->forget($currentLine);
                     $currentLine++;
                 }
                 break;

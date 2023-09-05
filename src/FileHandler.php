@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Vmeretail\PestPluginBdd;
 
+use Illuminate\Support\Collection;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class FileHandler
@@ -100,15 +101,15 @@ final class FileHandler
 
     }
 
-    public function savePestFile(string $testFilename, array $updatedLines) : void
+    public function savePestFile(string $testFilename, Collection $updatedLines) : void
     {
-        $stringVersionOfArray = implode("", $updatedLines);
-        file_put_contents($testFilename, $stringVersionOfArray);
+        $stringVersionOfCollection = $updatedLines->flatten()->implode('');
+        file_put_contents($testFilename, $stringVersionOfCollection);
     }
 
-    public function openTestFile(string $testFilename) : array
+    public function openTestFile(string $testFilename) : Collection
     {
-        return file($testFilename);
+        return new Collection(file($testFilename));
     }
 
 }

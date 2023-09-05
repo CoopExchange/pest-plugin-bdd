@@ -7,6 +7,7 @@ use Behat\Gherkin\Node\OutlineNode;
 use Behat\Gherkin\Node\PyStringNode;
 use Behat\Gherkin\Node\ScenarioNode;
 use Behat\Gherkin\Node\TableNode;
+use Illuminate\Support\Collection;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class PestCreator
@@ -21,62 +22,80 @@ final class PestCreator
         $this->fileHandler = new FileHandler($output);
     }
 
-    public function processBackground(BackgroundNode $backgroundNode, string $testFilename) : array
+    private function createBackground(BackgroundNode $backgroundNode, string $testFilename) : Collection
     {
-        $tempArray = [];
-        $tempArray[] = $this->writeBeforeEachOpen();
+
+        // COuld move this to a construct if sub divide this into classes
+        $tempArray = new Collection();
+        $tempArray->push($this->writeBeforeEachOpen());
 
         foreach($backgroundNode->getSteps() as $stepObject) {
-            $stepLines = $this->writeStep($testFilename, PestParser::BACKGROUND, $stepObject->getText(), $stepObject->getArguments());
-            $tempArray = array_merge($tempArray, $stepLines);
+            $tempArray->push(
+                $this->writeStep($testFilename, PestParser::BACKGROUND, $stepObject->getText(), $stepObject->getArguments())
+            );
         }
 
-        $tempArray[] = $this->writeBeforeEachClose();
+        $tempArray->push($this->writeBeforeEachClose());
 
         return $tempArray;
+    }
+
+    private function createScenario($scenarioObject, $testFilename) : Collection
+    {
+        $newTestFileLines = new Collection();
+        $newTestFileLines->push($this->writeItOpen($scenarioObject));
+
+        foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
+            $newTestFileLines->push(
+                $this->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText(), $scenarioStepObject->getArguments())
+            );
+        }
+
+        $newTestFileLines->push($this->writeItClose($scenarioObject));
+
+        if($scenarioObject instanceof OutlineNode) {
+            $newTestFileLines->push($this->createOutlineExampleTable($scenarioObject));
+        }
+
+        return $newTestFileLines;
     }
 
     public function createTestFile(string $testFilename, string $featureFileContents): void
     {
 
+        $newTestFile = new Collection();
+
         $featureObject = $this->gherkinParser->gherkin($featureFileContents);
 
-        $newTestFileLinesArray = [];
-        $newTestFileLinesArray[] = $this->createNewTestFile();
-        $newTestFileLinesArray[] = $this->writeDescribeOpen($featureObject->getTitle());
-        $description = $this->writeDescribeDescription($featureObject->getDescription());
-        $newTestFileLinesArray = array_merge($newTestFileLinesArray, $description);
-        $newTestFileLinesArray[] = PHP_EOL;
+        $newTestFile->push($this->createNewTestFile());
+        $newTestFile->push($this->writeDescribeOpen($featureObject->getTitle()));
+        $newTestFile->push($this->writeDescribeDescription($featureObject->getDescription()));
 
         if ($featureObject->getBackground() instanceof BackgroundNode) {
-            $backgroundLines = $this->processBackground($featureObject->getBackground(), $testFilename);
-            $newTestFileLinesArray = array_merge($newTestFileLinesArray, $backgroundLines);
+
+            $newTestFile->push(
+                $this->createBackground($featureObject->getBackground(), $testFilename)
+            );
+
         }
 
         foreach($featureObject->getScenarios() as $scenarioObject) {
-            $newTestFileLinesArray[] = $this->writeItOpen($scenarioObject);
 
-            foreach ($scenarioObject->getSteps() as $scenarioStepObject) {
-                $stepLines = $this->writeStep($testFilename, $scenarioObject->getTitle(), $scenarioStepObject->getText(), $scenarioStepObject->getArguments());
-                $newTestFileLinesArray = array_merge($newTestFileLinesArray, $stepLines);
-            }
-
-            $newTestFileLinesArray[] = $this->writeItClose($scenarioObject);
-
-            if($scenarioObject instanceof OutlineNode) {
-                $newTestFileLinesArray = array_merge($newTestFileLinesArray, $this->createOutlineExampleTable($scenarioObject));
-            }
+            $newTestFile->push(
+                $this->createScenario($scenarioObject, $testFilename)
+            );
 
         }
 
-        $newTestFileLinesArray[] = $this->writeDescribeClose();
-        $this->fileHandler->savePestFile($testFilename, $newTestFileLinesArray);
+        $newTestFile->push($this->writeDescribeClose());
+
+        $this->fileHandler->savePestFile($testFilename, $newTestFile);
 
     }
 
-    public function createOutlineExampleTable($scenarioObject) : array
+    public function createOutlineExampleTable($scenarioObject) : Collection
     {
-        $linesArray = [];
+        $lines = new Collection();
 
         $tableObject = $scenarioObject->getExampleTables();
         $tableArray = $tableObject[0]->getTable();
@@ -92,13 +111,24 @@ final class PestCreator
             }
 
             $lineText = substr($lineText, 0, -2);
-            $linesArray[] = chr(9).chr(9). trim($lineText) . "],".PHP_EOL;
+
+            $lines->push(
+                chr(9).
+                chr(9).
+                trim($lineText).
+                "],".
+                PHP_EOL
+            );
 
         }
 
-        $linesArray[] = chr(9). "]);".PHP_EOL;
+        $lines->push(
+            chr(9).
+            "]);".
+            PHP_EOL
+        );
 
-        return $linesArray;
+        return $lines;
     }
 
     public function convertStepArgumentToString($stepArguments) : string | null
@@ -110,7 +140,6 @@ final class PestCreator
         $stepArgument = $stepArguments[0];
 
         if ($stepArgument instanceof PyStringNode) {
-            //ray('CV11', $stepArgument);
 
             $lineText = $this->createStepVariableString($stepArgument->getStrings());
 
@@ -142,11 +171,10 @@ final class PestCreator
 
         }
 
-
         return $lineText;
     }
 
-    private function createStepVariableString($data)
+    private function createStepVariableString($data) : string
     {
         $lineText = chr(9).chr(9).chr(9).'$data = ['.PHP_EOL;
         foreach($data as $dataLine) {
@@ -168,37 +196,37 @@ final class PestCreator
         }
         $lineText.= chr(9).chr(9).chr(9)."];".PHP_EOL;
 
-        //ray('BED2', $lineText);
-
         return $lineText;
     }
 
 
 
-    private function createNewTestFile()
+    private function createNewTestFile() :string
     {
         return "<?php".PHP_EOL;
     }
 
-    private function writeDescribeOpen($describeTitle): string
+    private function writeDescribeOpen(string $describeTitle): string
     {
        return "describe('" . $describeTitle . "', function () {".PHP_EOL;
     }
 
 
-    public function writeDescribeDescription($describeDescription): array
+    public function writeDescribeDescription(string $describeDescription): Collection
     {
         $descriptionLines = explode("\n", $describeDescription);
 
-        $x[] = PHP_EOL . chr(9). "/*" . PHP_EOL ;
+        $tempLines = new Collection();
+
+        $tempLines->push(PHP_EOL . chr(9). "/*" . PHP_EOL);
 
         foreach($descriptionLines as $descriptionLine) {
-            $x[] = chr(9). " *" . $descriptionLine . PHP_EOL ;
+            $tempLines->push(chr(9). " *" . $descriptionLine . PHP_EOL);
         }
 
-        $x[] = chr(9). " */" . PHP_EOL;
+        $tempLines->push(chr(9). " */");
 
-        return $x;
+        return $tempLines;
     }
 
     private function writeDescribeClose(): string
@@ -208,16 +236,13 @@ final class PestCreator
 
     public function writeBeforeEachOpen() : string
     {
-
-        $beforeEachOpenString = chr(9)."beforeEach(function () {".PHP_EOL.PHP_EOL;
-        return $beforeEachOpenString;
-
+        return PHP_EOL.chr(9)."beforeEach(function () {".PHP_EOL.PHP_EOL;
     }
 
     public function writeItOpen($scenarioObject) : string
     {
         if($scenarioObject instanceof ScenarioNode) {
-            $itOpenString = chr(9)."it('" . $scenarioObject->getTitle() . "', function () {".PHP_EOL.PHP_EOL;
+            $itOpenString = PHP_EOL.chr(9)."it('" . $scenarioObject->getTitle() . "', function () {".PHP_EOL.PHP_EOL;
         }
 
         if($scenarioObject instanceof OutlineNode) {
@@ -225,7 +250,7 @@ final class PestCreator
             $tableObject = $scenarioObject->getExampleTables();
             $tableArray = $tableObject[0]->getTable();
 
-            $itOpenString = chr(9). "it('".$scenarioObject->getTitle()."', function (";
+            $itOpenString = PHP_EOL.chr(9). "it('".$scenarioObject->getTitle()."', function (";
 
             foreach(reset($tableArray) as $heading) {
 
@@ -329,22 +354,22 @@ final class PestCreator
         return [$requiredStepname, $parameterString, $parameterFields, $uniqueIdentifier];
     }
 
-    public function writeStep(string $testFilename, string $scenarioTitle, string $scenarioStepTitle, $stepArguments) : array
+    public function writeStep(string $testFilename, string $scenarioTitle, string $scenarioStepTitle, $stepArguments = array()) : Collection
     {
         $requiredStepNameArray = $this->calculateRequiredStepName($scenarioStepTitle, $testFilename, $scenarioTitle);
         $requiredStepName = $requiredStepNameArray[0];
         $parameterString = $requiredStepNameArray[1];
         $parameterFields = $requiredStepNameArray[2];
 
-        $tempAddition = [];
-        $tempAddition[] = chr(9).chr(9).'function ' . $requiredStepName . '('.$parameterFields.')'.PHP_EOL;
-        $tempAddition[] = chr(9).chr(9).'{'.PHP_EOL;
+        $tempAddition = new Collection();
+        $tempAddition->push(chr(9).chr(9).'function ' . $requiredStepName . '('.$parameterFields.')'.PHP_EOL);
+        $tempAddition->push(chr(9).chr(9).'{'.PHP_EOL);
 
-        $tempAddition[] = $this->convertStepArgumentToString($stepArguments) . PHP_EOL;
+        $tempAddition->push($this->convertStepArgumentToString($stepArguments) . PHP_EOL);
 
-        $tempAddition[] = chr(9).chr(9) . chr(9) . '// Insert test for this step here'.PHP_EOL;
-        $tempAddition[] = chr(9).chr(9) .'}' . PHP_EOL . PHP_EOL;
-        $tempAddition[] = chr(9).chr(9) . $requiredStepName . '('.$parameterString.');'. PHP_EOL . PHP_EOL;
+        $tempAddition->push(chr(9).chr(9) . chr(9) . '// Insert test for this step here'.PHP_EOL);
+        $tempAddition->push(chr(9).chr(9) .'}' . PHP_EOL . PHP_EOL);
+        $tempAddition->push(chr(9).chr(9) . $requiredStepName . '('.$parameterString.');'. PHP_EOL . PHP_EOL);
 
         return $tempAddition;
     }
