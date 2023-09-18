@@ -18,6 +18,10 @@ final class Plugin implements HandlesArguments
 
     private bool $createTests = false;
 
+    private bool $amendTests = false;
+
+    private string $singleFile;
+
     private FileHandler $fileHandler;
     private OutputHandler $outputHandler;
 
@@ -32,6 +36,7 @@ final class Plugin implements HandlesArguments
 
     public function handleArguments(array $arguments): array
     {
+        //ray('ARGUMENTS', $arguments);
 
         if (! $this->hasArgument('--bdd', $arguments)) {
             return $arguments;
@@ -41,10 +46,25 @@ final class Plugin implements HandlesArguments
             $this->createTests = true;
         }
 
-        $missingFeatureFileCount = $this->fileHandler->checkTestsHaveFeatureFiles();
-        $missingTestFileCount = $this->gherkinProcessor->checkFeaturesHaveTestFiles($this->createTests);
+        if ($this->hasArgument('--amend-tests', $arguments)) {
+            $this->amendTests = true;
+        }
 
-        $this->outputHandler->errorsToBeFixed(($missingFeatureFileCount + $missingTestFileCount));
+        foreach($arguments as $argument) {
+            if(str_contains($argument, '.php') === TRUE) {
+                $this->singleFile = $argument;
+            }
+        }
+
+        if (!is_null($this->singleFile) === TRUE) {
+            $featureFile = str_replace('.php', '.feature', $this->singleFile);
+
+            $this->gherkinProcessor->checkFeatureFileHasTestFile($featureFile, $this->createTests);
+        } else {
+            $missingFeatureFileCount = $this->fileHandler->checkTestsHaveFeatureFiles();
+            $missingTestFileCount = $this->gherkinProcessor->checkFeaturesHaveTestFiles($this->createTests);
+            $this->outputHandler->errorsToBeFixed(($missingFeatureFileCount + $missingTestFileCount));
+        }
 
         exit(0);
     }

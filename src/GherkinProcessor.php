@@ -39,17 +39,21 @@ final class GherkinProcessor
 
         foreach($featureFilesArray as $featureFileName) {
 
-            $this->processFeatureFile($featureFileName, $createTests);
+            $this->checkFeatureFileHasTestFile($featureFileName, $createTests);
 
         }
 
         return $this->errors;
 
     }
-    private function processFeatureFile(string $featureFilename, bool $createTests)
+    public function checkFeatureFileHasTestFile(string $featureFilename, bool $createTests)
     {
+        //$featureFilename = 'tmp/TestFeature.feature';
         $testFilename = $this->fileHandler->getTestFilename($featureFilename);
 
+        //ray('Q1', $testFilename);
+
+        // TODO: Move this to fileHandler
         $featureFileContents = @file_get_contents($featureFilename, true);
 
         $featureName = $this->gherkinParser->featureName($featureFileContents);
@@ -77,21 +81,34 @@ final class GherkinProcessor
     {
         $featureObject = $this->gherkinParser->gherkin($featureFileContents);
 
-        $this->updateTestFileDescription(
-            $testFilename,
-            $featureObject->getDescription(),
-            $featureObject->getLine()
-        );
+        if (!is_null($featureObject->getDescription())) {
+            $this->updateTestFileDescription(
+                $testFilename,
+                $featureObject->getDescription()
+            );
+        }
 
         if ($featureObject->getBackground() instanceof BackgroundNode) {
+
+            $describeDescription = $this->pestParser->getDescribeDescription(file_get_contents($testFilename));
+            if(!is_null($describeDescription[2])) {
+                $beforeEachStartLine = $describeDescription[2] + 2;
+            } else {
+                $beforeEachStartLine = $describeDescription[3] + 2;
+            }
+
+            ray('BACKGROUND', $featureObject->getBackground(), $featureObject);
+            ray('DESCRIBE DESCRIPTION', $this->pestParser->getDescribeDescription(file_get_contents($testFilename)));
+            //dd('STOP BACKGROUND');
             $this->processScenario(
                 $featureObject->getBackground(),
                 $testFilename,
-                $this->pestParser->getFeatureEndLineNumber($this->fileHandler->getTestFile($testFilename))
+                $beforeEachStartLine
             );
         }
 
         foreach($featureObject->getScenarios() as $scenarioObject) {
+            ray('A1: **processExistingTestFile** EACH SCENARIO:' , $scenarioObject);
             $this->processScenario(
                 $scenarioObject,
                 $testFilename,
@@ -101,10 +118,13 @@ final class GherkinProcessor
 
     }
 
-    private function updateTestFileDescription(string $testFilename, string $featureDescription, int $lineNumber) : void
+    private function updateTestFileDescription(string $testFilename, string $featureDescription) : void
     {
         $testFileContents = $this->fileHandler->getTestFile($testFilename);
         $describeDescription = $this->pestParser->getDescribeDescription($testFileContents);
+        //ray('DESCRIBE DESCRIPTION FROM EXISTING PEST FILE:', $describeDescription);
+
+        $lineNumber = $describeDescription[3];
 
         $testFileLines = $this->fileHandler->openTestFile($testFilename);
         $testFileLines = $this->pestParser->removeExistingDescriptionFromPestFile($describeDescription, $testFileLines);
@@ -121,6 +141,7 @@ final class GherkinProcessor
     private function compareFunctionScenarioToPestScenario($testFilename, $scenarioLikeTitle, $pestScenario, $scenarioLikeObject)
     {
         $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
+        ray('A3_1 **compareFunctionScenarioToPestScenario** OPENED TEST FILE: ', $editedTestFileLines);
 
         $this->outputHandler->scenarioIsInTest($scenarioLikeTitle, $testFilename);
 
@@ -136,9 +157,12 @@ final class GherkinProcessor
         }
 
         $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
+        ray('A3_2 **compareFunctionScenarioToPestScenario** SAVED TEST FILE: ', $editedTestFileLines);
 
         $this->checkForMissingSteps($scenarioLikeObject->getSteps(), $pestScenario->steps, $scenarioLikeTitle, $testFilename, $pestScenario->endLine);
 
+        $temp = $this->fileHandler->openTestFile($testFilename);
+        ray('A3_3 TESTFILE: **compareFunctionScenarioToPestScenario** AFTER CHECK FOR MISSING STEPS: ', $temp);
     }
 
     private function addMissingPestScenario($testFilename, $scenarioLikeTitle, $scenarioLikeObject, $featureEndLineNumber)
@@ -155,6 +179,8 @@ final class GherkinProcessor
 
             if(!$scenarioLikeObject instanceof BackgroundNode) {
                 $stepArguments = $scenarioStepObject->getArguments();
+            } else {
+                $stepArguments = [];
             }
 
             $tempAddition->push(
@@ -176,7 +202,7 @@ final class GherkinProcessor
     private function processScenario($scenarioLikeObject, $testFilename, $featureEndLineNumber)
     {
 
-        // TODO: Get rid of this
+        // TODO: Get rid of this - only for background/beforeEach
         if(is_null($scenarioLikeObject->getTitle())) {
             $scenarioLikeTitle = 'beforeEach';
         } else {
@@ -191,11 +217,11 @@ final class GherkinProcessor
 
         // There is an equivalent scenario (it or beforeEach) in the Pest file
         if ($pestScenario instanceof PestScenario) {
-
+            ray('A2: **processScenario** FOUND PEST SCENARIO: '. $scenarioLikeTitle);
             $this->compareFunctionScenarioToPestScenario($testFilename, $scenarioLikeTitle, $pestScenario, $scenarioLikeObject);
 
         } else {
-
+            ray('A2: **processScenario** NOT FOUND PEST SCENARIO: '. $scenarioLikeTitle);
             $this->addMissingPestScenario($testFilename, $scenarioLikeTitle, $scenarioLikeObject, $featureEndLineNumber);
 
         }
@@ -213,12 +239,15 @@ final class GherkinProcessor
     private function rewriteStepData($testFilename, $y, $stepArguments)
     {
         $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
+        ray('A6_1 **rewriteStepData** TEST FILE TO BEGIN: ', $editedTestFileLines);
 
         $editedTestFileLines = $this->pestParser->removeExistingDataFromStep($y, $editedTestFileLines);
+        ray('A6_2 **rewriteStepData** AFTER REMOVING EXISTING DATA FROM STEP: ', $editedTestFileLines);
         //$stepArgumentsData = $this->pestCreator->convertStepArgumentToString($stepArguments);
         //$data[] = $stepArgumentsData;
         //array_splice($r, $y, 0, $data);
         $editedTestFileLines->splice($y, 0, $this->pestCreator->convertStepArgumentToString($stepArguments));
+        ray('A6_3 **rewriteStepData** AFTER SPLICING DATA BACK IN: ', $editedTestFileLines);
 
         $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
     }
@@ -226,8 +255,12 @@ final class GherkinProcessor
     private function addMissingPestStep($testFilename, $scenarioTitle, $scenarioStepObject, $endLine)
     {
         $editedTestFileLines = $this->fileHandler->openTestFile($testFilename);
-        $result = $this->pestCreator->writeStep($testFilename, $scenarioTitle, $scenarioStepObject->getText(), $scenarioStepObject->getArguments());
-        array_splice($editedTestFileLines, ($endLine+1), 0, $result);
+        $editedTestFileLines->splice(
+            ($endLine+1),
+            0,
+            $this->pestCreator->writeStep($testFilename, $scenarioTitle, $scenarioStepObject->getText(), $scenarioStepObject->getArguments())
+        );
+
         $this->fileHandler->savePestFile($testFilename, $editedTestFileLines);
     }
 
@@ -244,9 +277,11 @@ final class GherkinProcessor
             return $item->name == $requiredStepName;
         })->first();
 
-        //ray('KK1', $requiredStepName, $scenarioStepObject, $pestStep, $requiredStepNameArray, $pestSteps, $uniqueIdentifier, $endLine);
+        ray('A5_1: **checkForMissingPestStep** ', $requiredStepName, $scenarioStepObject, $pestStep, $requiredStepNameArray, $pestSteps, $uniqueIdentifier, $endLine);
 
         if($pestStep instanceof PestStep) {
+
+            ray('A5_2 **checkForMissingPestStep** STEP EXISTS IN FILE');
 
             // The step exists in the test file
             $this->outputHandler->stepIsInTest($scenarioStepObject->getText(), $testFilename);
@@ -254,22 +289,36 @@ final class GherkinProcessor
             // Does it have any parameters? If so, rewrite the opening line (including the parameters)
             if(str_contains($requiredStepName, 'parameter')) {
                 $this->rewriteStepOpeningLine($testFilename, $pestStep->startLine, $requiredStepName, $parameterString);
+                $temp = $this->fileHandler->openTestFile($testFilename);
+                ray('A5_3: **checkForMissingPestStep**  AFTER STEP IN EXISTING FILE: ', $temp);
+
             }
 
-            // Rewrite the step data if it has any
             $y = $pestStep->functionStartLine+1;
+            // Rewrite the step data if it has any
+            ray('A5_4: **checkForMissingPestStep**  ABOUT TO REWRITE STEP DATA: y='.$y);
+
             $stepArguments = $scenarioStepObject->getArguments();
             if(array_key_exists(0, $stepArguments)) {
+                ray('A5_4_1 REWRITING STEP DATA: ', $y, $stepArguments);
                 $this->rewriteStepData($testFilename, $y, $stepArguments);
             }
 
+            $temp2 = $this->fileHandler->openTestFile($testFilename);
+            ray('A5_5: **checkForMissingPestStep**  AFTER REWRITING STEP DATA: ', $temp2);
+
         } else {
+
+            ray('A5_6 **checkForMissingPestStep** STEP DOES NOT EXIST IN THE PEST FILE SO WILL ADD');
 
             // The step doesn't exist in the test file
             $this->outputHandler->stepIsNotInTest($scenarioStepObject->getText(), $testFilename);
             $this->errors++;
 
             $this->addMissingPestStep($testFilename, $scenarioTitle, $scenarioStepObject, $endLine);
+
+            $temp = $this->fileHandler->openTestFile($testFilename);
+            ray('A5_7: **checkForMissingPestStep** AFTER MISSING STEP ADDED TO EXISTING FILE: ', $temp);
 
         }
     }
@@ -278,8 +327,11 @@ final class GherkinProcessor
     {
 
         foreach ($scenarioSteps as $scenarioStepObject) {
-
+            ray('A4_1: **checkForMissingSteps** ABOUT TO CHECK FOR MISSING PEST STEP', $scenarioStepObject);
             $this->checkForMissingPestStep($scenarioStepObject, $testFilename, $scenarioTitle, $pestSteps, $endLine);
+
+            $temp = $this->fileHandler->openTestFile($testFilename);
+            ray('A4_2: **checkForMissingSteps** AFTER CHECK FOR MISSING PEST STEP: ', $temp);
 
         }
 

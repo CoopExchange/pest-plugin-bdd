@@ -69,7 +69,10 @@ final class PestCreator
 
         $newTestFile->push($this->createNewTestFile());
         $newTestFile->push($this->writeDescribeOpen($featureObject->getTitle()));
-        $newTestFile->push($this->writeDescribeDescription($featureObject->getDescription()));
+
+        if (!is_null($featureObject->getDescription())) {
+            $newTestFile->push($this->writeDescribeDescription($featureObject->getDescription()));
+        }
 
         if ($featureObject->getBackground() instanceof BackgroundNode) {
 
@@ -176,7 +179,7 @@ final class PestCreator
 
     private function createStepVariableString($data) : string
     {
-        $lineText = chr(9).chr(9).chr(9).'$data = ['.PHP_EOL;
+        $lineText = chr(9).chr(9).chr(9).'$data = new \Illuminate\Support\Collection(['.PHP_EOL;
         foreach($data as $dataLine) {
 
             $lineText.= chr(9).chr(9).chr(9).chr(9). '[';
@@ -194,7 +197,7 @@ final class PestCreator
             $lineText.= "],".PHP_EOL;
 
         }
-        $lineText.= chr(9).chr(9).chr(9)."];".PHP_EOL;
+        $lineText.= chr(9).chr(9).chr(9)."]);".PHP_EOL;
 
         return $lineText;
     }
@@ -218,20 +221,20 @@ final class PestCreator
 
         $tempLines = new Collection();
 
-        $tempLines->push(PHP_EOL . chr(9). "/*" . PHP_EOL);
+        $tempLines->push(chr(9). "/*" . PHP_EOL);
 
         foreach($descriptionLines as $descriptionLine) {
             $tempLines->push(chr(9). " *" . $descriptionLine . PHP_EOL);
         }
 
-        $tempLines->push(chr(9). " */");
+        $tempLines->push(chr(9). " */".PHP_EOL.PHP_EOL);
 
         return $tempLines;
     }
 
     private function writeDescribeClose(): string
     {
-        return PHP_EOL.PHP_EOL."});";
+        return PHP_EOL."});".PHP_EOL;
     }
 
     public function writeBeforeEachOpen() : string
@@ -275,13 +278,13 @@ final class PestCreator
 
     public function writeBeforeEachClose() : string
     {
-        return chr(9)."});".PHP_EOL.PHP_EOL;
+        return chr(9)."});".PHP_EOL;
     }
 
     public function writeItClose($scenarioObject) : string
     {
         if($scenarioObject instanceof ScenarioNode) {
-            return chr(9)."})->todo();".PHP_EOL.PHP_EOL;
+            return chr(9)."})->todo();".PHP_EOL;
         }
 
         if($scenarioObject instanceof OutlineNode) {
@@ -354,7 +357,7 @@ final class PestCreator
         return [$requiredStepname, $parameterString, $parameterFields, $uniqueIdentifier];
     }
 
-    public function writeStep(string $testFilename, string $scenarioTitle, string $scenarioStepTitle, $stepArguments = array()) : Collection
+    public function writeStep(string $testFilename, string $scenarioTitle, string $scenarioStepTitle, $stepArguments = []) : Collection
     {
         $requiredStepNameArray = $this->calculateRequiredStepName($scenarioStepTitle, $testFilename, $scenarioTitle);
         $requiredStepName = $requiredStepNameArray[0];

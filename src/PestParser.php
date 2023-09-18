@@ -28,6 +28,8 @@ class PestParser
 
     public function getFeatureEndLineNumber(string $testFileContents) : int
     {
+        //ray('FEATURES', $this->getFeatures());
+        //dd('STOP FEATURES');
         return $this->getFeatures($testFileContents)
             ->keys()
             ->first();
@@ -225,8 +227,9 @@ class PestParser
 
             switch ($functionName) {
                 case self::FEATURE:
-
+                    $describeLineNumber = $method->getLine();
                     $describeDescriptionObject = $method->args[1]->value->stmts[0]->getComments();
+                    // ray('DESCRIPTION OBJECT', $describeDescriptionObject, $method->getLine(), $method->getStartLine(), $method->getEndLine());
 
                     if(count($describeDescriptionObject) !== 0) {
                         $describeDescription = $method->args[1]->value->stmts[0]->getComments()[0];
@@ -239,7 +242,7 @@ class PestParser
 
         }
 
-        return array($describeDescriptionStartText, $describeDescriptionStartLine, $describeDescriptionEndLine);
+        return array($describeDescriptionStartText, $describeDescriptionStartLine, $describeDescriptionEndLine, $describeLineNumber);
     }
 
     private function getFuncCallMethods(string $testFileContents)
@@ -264,7 +267,7 @@ class PestParser
     {
         if (!is_null($describeDescription[0])) {
             $currentLine = $describeDescription[1] -1;
-            $endLine = $describeDescription[2];
+            $endLine = $describeDescription[2]+1;
 
             while($currentLine < $endLine) {
                 $editedTestFileLines->forget($currentLine);
@@ -281,15 +284,25 @@ class PestParser
         $currentLine = $startLine;
         $endLine = count($editedTestFileLines);
 
+        ray('A10_1 **removeExistingDataFromStep**', $currentLine, $endLine);
+
+        if(!str_contains(trim($editedTestFileLines[$currentLine]), '$data = new')) {
+            ray('A10_2 startLine does not contain data:', $currentLine, $editedTestFileLines[$currentLine]);
+            return $editedTestFileLines;
+        }
+
         while($currentLine <= $endLine) {
 
-            if (trim($editedTestFileLines[$currentLine]) == '];') {
+            if (trim($editedTestFileLines[$currentLine]) == ']);') {
                 $endLine = $currentLine;
             }
             if (trim($editedTestFileLines[$currentLine]) != '{') {
                 //unset($editedTestFileLines[$currentLine]);
                 $editedTestFileLines->forget($currentLine);
             }
+
+            ray('A10_2 **removeExistingDataFromStep**', $currentLine, $endLine, $editedTestFileLines[$currentLine]);
+
             $currentLine++;
         }
 
