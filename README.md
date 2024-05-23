@@ -1,5 +1,15 @@
 # Installation
 
+Firstly, until this repo is public, you need to add it to composer.json as a private repo:
+```php
+"repositories": [
+        {            "type": "vcs",
+            "url":  "git@github.com:CoopExchange/pest-plugin-bdd.git"
+        }
+    ]
+```
+
+
 ```php
 composer require CoopExchange/pest-plugin-bdd
 ```
