@@ -1,7 +1,7 @@
 # Installation
 
 ```php
-composer require vmeretail/pest-plugin-bdd
+composer require CoopExchange/pest-plugin-bdd
 ```
 
 # How to use
