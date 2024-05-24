@@ -1,6 +1,6 @@
 <?php
 
-namespace Vmeretail\PestPluginBdd;
+namespace CoopExchange\PestPluginBdd;
 
 use Behat\Gherkin\Keywords\ArrayKeywords;
 use Behat\Gherkin\Lexer;

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Vmeretail\PestPluginBdd;
+namespace CoopExchange\PestPluginBdd;
 
 use Illuminate\Support\Collection;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -13,14 +13,14 @@ final class FileHandler
 
     private int $errors = 0;
 
-    private const BDD_PATH = 'tests/Feature/';
+    private const BDD_PATH = 'tests/Feature/BDD';
 
-    public function __construct(private readonly OutputInterface $output)
+    public function __construct(OutputInterface $output)
     {
         $this->outputHandler = new OutputHandler($output);
     }
 
-    public function getTestFilename($featureFilename)
+    public function getTestFilename(string $featureFilename): string
     {
         return str_replace('.feature', '.php', $featureFilename);
     }

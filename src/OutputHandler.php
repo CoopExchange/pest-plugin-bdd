@@ -1,6 +1,6 @@
 <?php
 
-namespace Vmeretail\PestPluginBdd;
+namespace CoopExchange\PestPluginBdd;
 
 use Symfony\Component\Console\Output\OutputInterface;
 
