@@ -2,9 +2,8 @@
 
 declare(strict_types=1);
 
-namespace Vmeretail\PestPluginBdd;
+namespace CoopExchange\PestPluginBdd;
 
-// use Pest\Contracts\Plugins\AddsOutput;
 use Pest\Contracts\Plugins\HandlesArguments;
 use Pest\Plugins\Concerns\HandleArguments;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -18,16 +17,12 @@ final class Plugin implements HandlesArguments
 
     private bool $createTests = false;
 
-    private bool $amendTests = false;
-
-    private string $singleFile;
-
     private FileHandler $fileHandler;
     private OutputHandler $outputHandler;
 
     private GherkinProcessor $gherkinProcessor;
 
-    public function __construct(private readonly OutputInterface $output)
+    public function __construct(OutputInterface $output)
     {
         $this->fileHandler = new FileHandler($output);
         $this->outputHandler = new OutputHandler($output);
@@ -36,9 +31,7 @@ final class Plugin implements HandlesArguments
 
     public function handleArguments(array $arguments): array
     {
-        //ray('ARGUMENTS', $arguments);
-
-        if (! $this->hasArgument('--bdd', $arguments)) {
+        if (!$this->hasArgument('--bdd', $arguments)) {
             return $arguments;
         }
 
@@ -46,25 +39,15 @@ final class Plugin implements HandlesArguments
             $this->createTests = true;
         }
 
-        if ($this->hasArgument('--amend-tests', $arguments)) {
-            $this->amendTests = true;
-        }
-
-        foreach($arguments as $argument) {
-            if(str_contains($argument, '.php') === TRUE) {
+        foreach ($arguments as $argument) {
+            if (str_contains($argument, '.php') === TRUE) {
                 $this->singleFile = $argument;
             }
         }
 
-        if (!is_null($this->singleFile) === TRUE) {
-            $featureFile = str_replace('.php', '.feature', $this->singleFile);
-
-            $this->gherkinProcessor->checkFeatureFileHasTestFile($featureFile, $this->createTests);
-        } else {
-            $missingFeatureFileCount = $this->fileHandler->checkTestsHaveFeatureFiles();
-            $missingTestFileCount = $this->gherkinProcessor->checkFeaturesHaveTestFiles($this->createTests);
-            $this->outputHandler->errorsToBeFixed(($missingFeatureFileCount + $missingTestFileCount));
-        }
+        $missingFeatureFileCount = $this->fileHandler->checkTestsHaveFeatureFiles();
+        $missingTestFileCount = $this->gherkinProcessor->checkFeaturesHaveTestFiles($this->createTests);
+        $this->outputHandler->errorsToBeFixed(($missingFeatureFileCount + $missingTestFileCount));
 
         exit(0);
     }

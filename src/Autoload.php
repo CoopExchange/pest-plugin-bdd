@@ -2,6 +2,6 @@
 
 declare(strict_types=1);
 
-namespace Vmeretail\PestPluginBdd;
+namespace CoopExchange\PestPluginBdd;
 
 

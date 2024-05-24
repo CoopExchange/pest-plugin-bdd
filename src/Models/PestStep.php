@@ -1,6 +1,6 @@
 <?php
 
-namespace Vmeretail\PestPluginBdd\Models;
+namespace CoopExchange\PestPluginBdd\Models;
 
 use Spatie\LaravelData\Data;
 
