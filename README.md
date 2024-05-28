@@ -3,28 +3,37 @@
 Firstly, until this repo is public, you need to add it to composer.json as a private repo:
 ```php
 "repositories": [
-        {            "type": "vcs",
-            "url":  "git@github.com:CoopExchange/pest-plugin-bdd.git"
+        {
+            "type": "vcs",
+            "url": "https://github.com/CoopExchange/pest-plugin-bdd"
         }
-    ]
+    ],
 ```
 
+and then require it with composer using the below:
 
 ```php
-composer require CoopExchange/pest-plugin-bdd
+composer require coop-exchange/pest-plugin-bdd
 ```
 
 # How to use
 This plugin expects a feature file (ending `.feature` e.g. `ExampleTest.feature`) for every Pest test, with the exact
-same name (i.e. only the extension changes from `.php` to `.feature`)
+same name (i.e. only the extension changes from `.php` to `.feature`).
+The feature and related test files should live in the directory `tests/Feature/BDD`.
 
 You run the command by adding the `--bdd` parameter, e.g.
 ```php
 vendor/bin/pest --bdd
 ```
 
-You can also add `--create-tests` which will not only create Test php files, but amend existing ones to reflect any
-changes in the feature file:
+The above command will check all `.feature` files have a related test file and have the correct tests inside. 
+Once run you can then run the test suit normal, e.g.:
+
+```php
+vendor/bin/pest
+```
+
+You can also add `--create-tests` which will create the test files that are missing:
 ```php
 vendor/bin/pest --bdd --create-tests
 ```
@@ -77,33 +86,15 @@ Given there are users:
 | fabpot   | 22@222   | fabpot@symfony.com  |
 ```
 
-The plugin will automatically create the following in your test file (and update it should you change the table):
+The plugin will automatically create the following in your test file:
 ```php
-// Note this function will be inserted into your 'it' test
-function step_10ca07b4_5cd0026e_there_are_users()
-{
-    $data = [
-        ["username" => 'everzet', "password" => '123456', "email" => 'everzet@knplabs.com'],
-        ["username" => 'fabpot', "password" => '22@222', "email" => 'fabpot@symfony.com'],
-    ];
+test('Given there are no applications in this tenant, but there is an application in another tenant with the following', function () {
+    $data = new \Illuminate\Support\Collection([
+       ['Name' => 'Another tenants application', 'Description' => 'Description of another tenants application'],
+    ]);
 
     // Insert test for this step here
-}
-
-step_10ca07b4_5cd0026e_there_are_users();
-```
-
-Note the `step_10ca07b4_5cd0026e_` is for internal use to ensure two functions are never the same name.
-
-- `step_` is hardcoded to reflect this is a step (as opposed to a user defined function in your test)
-- `10ca07b4` is a crc32 hash of the filename
-- `5cd0026e` is a crc32 hash of the scenario name
-
-This is the code that creates it:
-```php
-$fileHash = hash('crc32', $testFilename);
-$scenarioHash = hash('crc32', $scenarioTitle);
-$requiredStepname = 'step_' . $fileHash . '_' . $scenarioHash . '_' . $stepname;
+})->todo();
 ```
 
 ## When
